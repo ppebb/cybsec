@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+function repl() {
+    printf "$1"'%.s' $(eval "echo {1.."$(($2))"}")
+}
+
 function get_users {
     # The <65534 condition is to skip the nobody user
     users=$(awk -F: '{if ($3 >= 1000 && $3 < 65534) print $1}' < /etc/passwd)
@@ -19,10 +23,10 @@ function prompt_y_n {
 
     case "$response" in
         [yY]*)
-            return 1
+            return 0 # true
             ;;
         *)
-            return 0
+            return 1 # false
     esac
 }
 
@@ -239,21 +243,31 @@ function manage_users {
     get_users
 
     for user in $users; do
-        if ! [[ "$allowed_users" == *"$user"* ]]; then
-             if prompt_y_n "Unauthorized user $user found, delete the user? [y/N]"; then
+        if ! [[ "$allowed_users" == *"$user"* ]] && ! [[ "$admins" == *"$user"* ]]; then
+             if prompt_y_n "Unauthorized user $user found, delete the user? [y/N] "; then
+                 echo "Deleting user $user"
                  userdel "$user"
-                 continue
              fi
-
         fi
 
-        if groups "$user" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers"; then
+        # Neat little trick to get both stdout and stderr
+        # shellcheck disable=1090,2030
+        . <({ gerr=$({ gout=$(groups "$user"); } 2>&1; declare -p gout >&2); declare -p gerr; } 2>&1)
+
+        if [ -n "$gerr" ]; then
+            echo "Error '$gerr' when attempting to check groups of $user"
+            continue
+        fi
+
+        # shellcheck disable=2031
+        if echo "$gout" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers"; then
             if ! [[ "$admins" == *"$user"* ]]; then
-                if prompt_y_n "User $user appears to be an admin when they should not be, remove the group? [y/N]"; then
+                if prompt_y_n "User $user appears to be an admin when they should not be, attempt to remove the group? [y/N] "; then
                     # TODO: Maybe don't just try every group??
+                    echo "Removing user from groups admin, wheel, staff, sudo, sudoers"
                     gpasswd -d "$user" admin
                     gpasswd -d "$user" wheel
-                    gpasswd -d "$user" statff
+                    gpasswd -d "$user" staff
                     gpasswd -d "$user" sudo
                     gpasswd -d "$user" sudoers
                 fi
@@ -262,12 +276,20 @@ function manage_users {
     done
 
     for user in $admins; do
-        if ! groups "$user" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers"; then
+        # shellcheck disable=1090
+        . <({ gerr=$({ gout=$(groups "$user"); } 2>&1; declare -p gout >&2); declare -p gerr; } 2>&1)
+
+        if [ -n "$gerr" ]; then
+            echo "Error '$gerr' when attempting to check groups of $user"
+            continue
+        fi
+
+        if ! echo "$user" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers"; then
             echo "User $user appears not to be an administrator when they should be"
         fi
     done
 
-    echo "All available users to check against for anything this missed"
+    echo "All available users to check against for anything this missed: "
     echo "$users"
 
     echo "Done managing users"
@@ -346,7 +368,7 @@ function password_files {
 
     echo "Checking for files containing passwords"
     # TODO: Any way to speed this up?
-    printf "Files containing passwords located in: $(rg --hidden --no-ignore --files-with-matches --fixed-strings -f patterns /home/)"
+    printf "Files containing passwords located in: %s" "$(rg --hidden --no-ignore --files-with-matches --fixed-strings -f patterns /home/)"
 }
 
 function extras {
@@ -372,24 +394,6 @@ function print_help {
 ppeb's cyber patriot linux script!!!
 
 Usage: script.sh [OPTIONS]
-
-Options:
- -u|--update                   Runs debian update commands
- -au|--auto-updates            Enables automatic updates
- -f|--firewall                 Installs, enables, and configures ufw
- -mu|--manage-users            Deletes unathorized users, ensures all admins are correct, either from a list passed in by --users or from a parsed readme link in --readme
- -pw|--passwords               Set all passwords (except for your account) to a given string
- -e|--expiry                   Configure password expiry in /etc/login.defs. May want to use cracklib or other pam settings eventually
- -lr|--lock-root               Locks the root account
- -lm|--list-media              Lists media files
- -kp|--kernel-parameters       Configures kernel parameters in the file
- -rs|--remove-software         Removes disallowed software
- -pup|--unwanted-programs      Lists potentially unwanted programs that are installed
- -pwf|--password-files         Search for any passwords (from the readme) stored in files
- -ex|--extras                  A couple little checks that could be useful
- --all                         Runs everything prior. Needs --readme or --users
-
-These options apply globally or to multiple commands:
  --users                       Comma/semicolon separated list of your user, administrators, normal users, and passwords: {your user;admin1,admin2,admin3;normal1,normal2,normal3;password1,password2}. Note that if the password contains commas you're fucked
  --readme                      Link to grab readme from; will be parsed for authorized users and administrators
 "
@@ -407,87 +411,39 @@ if [ "$user" != 'root' ]; then
 fi
 
 if [ $# -eq 0 ]; then # Check for commands
-    echo "No command supplied"
+    echo "No users or readme supplied"
     print_help
     exit 1
 fi
 
-# We love the fatass switch case
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
             print_help
             exit
         ;;
-        -u|--update)
-            r_update=true
-            shift
-            ;;
-        -au|--auto-updates)
-            r_auto_updates=true
-            shift
-            ;;
-        -f|--firewall)
-            r_firewall=true
-            shift
-            ;;
-        -mu|--manage-users)
-            r_mu=true
-            shift
-            ;;
-        -pw|--passwords)
-            r_pw=true
-            shift
-            ;;
-        -e|--expiry)
-            r_e=true
-            shift
-            ;;
-        -lr|--lock-root)
-            r_lr=true
-            shift
-            ;;
-        -lm|--list-media)
-            r_lm=true
-            shift
-            ;;
-        -kp|--kernel-parameters)
-            r_kp=true
-            shift
-            ;;
-        -rs|--remove-software)
-            r_rs=true
-            shift
-            ;;
-        -pup|--unwanted-programs)
-            r_pup=true
-            shift
-            ;;
-        -pwf|--password-files)
-            r_pwf=true
-            shift
-            ;;
-        -ex|--extras)
-            r_ex=true
-            shift
-            ;;
-        --all)
-            all=true
-            shift
-            ;;
         --users)
             ;;
         --readme)
-            link="$2"
-            text=$(curl "$link")
+            file=$(echo -n "$2" | md5sum | awk '{print $1}')
+            file="$file.urlhash"
+
+            # Hash the url and write it to a file so repeated requests aren't made
+            if [ ! -e "$file" ]; then
+                text=$(curl "$2")
+                echo "$text" > "$file"
+            else
+                text=$(cat "$file")
+            fi
 
             # PRAYING THIS WORKS OR I'LL KILL MYSELF
             if [[ $text =~ $readme_exp ]]; then
                 admins="${BASH_REMATCH[1]}"
-                allowed_users="${BASH_REMATCH[2]}"
+                allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
                 admins=${admins#*$'\n'}
+                # some of these have random newlines... should be fine
                 passwords=$(echo "$admins" | grep "password" | sed "s/password: //g" | sed "s/^[ \t]*//" )
-                admins=$(echo "$admins" | grep -v "password" | sed "s/(you)//g")
+                admins=$(echo "$admins" | grep -v "password" | sed "s/(you)//g" | tr -d '\r')
                 vm_user=$(echo "$admins" | head -n1)
             fi
 
@@ -502,62 +458,49 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -v all ]]; then
-    if ! [[ -v admins ]] || ! [[ -v allowed_users ]] || ! [[ -v passwords ]] || ! [[ -v vm_user ]]; then
-        echo "Please use --readme when using --all"
-        exit
-    fi
-fi
-
-# This is all annoying as hell but like I needed to parse options before running anything so this is the easiest option to do at 3 am
-if [[ -v r_update ]] || [[ -v all ]]; then
+funcs=(
     update
-fi
-
-if [[ -v r_auto_updates ]] || [[ -v all ]]; then
     auto_update
-fi
-
-if [[ -v r_firewall ]] || [[ -v all ]]; then
     firewall
-fi
-
-if [[ -v r_mu ]] || [[ -v all ]]; then
     manage_users
-fi
-
-if [[ -v r_pw ]] || [[ -v all ]]; then
     passwords
-fi
-
-if [[ -v r_e ]] || [[ -v all ]]; then
     expiry
-fi
-
-if [[ -v r_lr ]] || [[ -v all ]]; then
     lock_root
-fi
-
-if [[ -v r_lm ]] || [[ -v all ]]; then
     list_media
-fi
-
-if [[ -v r_kp ]] || [[ -v all ]]; then
     kernel_parameters
-fi
-
-if [[ -v r_rs ]] || [[ -v all ]]; then
     remove_software
-fi
-
-if [[ -v r_pup ]] || [[ -v all ]]; then
     unwanted_programs
-fi
-
-if [[ -v r_pwf ]] || [[ -v all ]]; then
     password_files
-fi
-
-if [[ -v r_ex ]] || [[ -v all ]]; then
     extras
-fi
+)
+
+re='^[0-9]+$'
+function menu() {
+    echo
+
+    # Spacing is a little off once it gets to 2 digits but I don't care. Someone else can fix it
+    for ((i = 0; i < ${#funcs[@]}; i += 2)); do
+        prefix="($i)"
+        line="$prefix ${funcs[i]}"
+        if [ -n "${funcs[i + 1]}" ]; then
+            line="$line$(repl ' ' $(( 25 - (${#funcs[i]} + ${#prefix}) )))($((i + 1))) ${funcs[i + 1]}"
+        fi
+        echo "$line"
+    done
+    read -r -p '> ' input
+
+    if ! [[ $input =~ $re ]] ; then
+       echo "Please enter a number."
+       return
+    fi
+
+    if [[ $input -ge "${#funcs[@]}" ]] || [[ $input -lt 0 ]]; then
+        echo "Please enter a number from 0 to $(( ${#funcs[@]} - 1 ))"
+        return
+    fi
+
+    ${funcs[$input]}
+}
+
+echo "ppeb's cybsec script. warranty not included, use at your own risk"
+while true; do menu; done
