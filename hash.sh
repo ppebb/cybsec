@@ -2,23 +2,60 @@
 
 directories=(
     "/etc"
+    #"/usr" # Don't check usr, has like 100k files...
+    "/srv"
+    "/opt"
     # What else to check...
 )
 
+# https://unix.stackexchange.com/questions/103920/parallelize-a-bash-for-loop
+# initialize a semaphore with a given number of tokens
+open_sem(){
+    mkfifo pipe-$$
+    exec 3<>pipe-$$
+    rm pipe-$$
+    local i=$1
+    for((;i>0;i--)); do
+        printf %s 000 >&3
+    done
+}
+
+# run the given command asynchronously and pop/push tokens
+run_with_lock(){
+    local x
+    # this read waits until there is something to read
+    read -u 3 -n 3 x && ((0==x)) || exit "$x"
+    (
+     ( "$@"; )
+    # push the return code of the command to the semaphore
+    printf '%.3d' $? >&3
+    )&
+}
+
+N=1000
+function hash_inner() {
+    perm=$(stat -c "%a" "$1")
+    if [ -d "$1" ]; then
+        echo "d  $1  $perm" >> "$2"
+        return
+    fi
+
+    sum=$(xxh64sum "$file")
+    echo "$sum  $perm" >> "$2"
+}
+
 function hash_all() {
+    open_sem $N
     for dir in "${directories[@]}"; do
         files=$(find "$dir")
 
         for file in $files; do
-            if [ -d "$file" ]; then
-                continue
-            fi
-
-            xxh64sum "$file" >> "$1"
+            run_with_lock hash_inner "$file" "$1"
         done
     done
 }
 
+# This cannot be parallelized easily because I need to assign stuff to sums_by_file... oh well
 function check_all() {
     # Create a dictionary??
     declare -A sums_by_file
@@ -26,24 +63,39 @@ function check_all() {
     # Check that all files in the provided hash file both exist and match
     while read -r line; do
         IFS="  " read -ra split <<< "$line"
-        sum="${split[0]}"
-        file="${split[1]}"
+        local file="${split[1]}"
 
-        sums_by_file[$file]=$sum
+        if [ "${split[0]}" = "d" ]; then
+            local perm="${split[1]}"
+        else
+            local sum="${split[0]}"
+            local perm="${split[2]}"
+        fi
 
         if [ ! -e "$file" ]; then
             echo "$file" >> "missing.log"
             continue
         fi
 
-        newsum=$(xxh64sum "$file")
+        local newperm
+        newperm=$(stat -c "%a" "$file")
 
-        if [ "$line" != "$newsum" ]; then
-            echo "$file" >> "changed.log"
+        if [ ! "$perm" -eq "$newperm" ]; then
+            echo "$file changed permissions from $perm to $newperm" >> "perms.log"
+        fi
+
+        if [ -v sum ]; then
+            sums_by_file[$file]=$sum
+
+            newsum=$(xxh64sum "$file")
+
+            if [ "$line" != "$newsum" ]; then
+                echo "$file" >> "changed.log"
+            fi
         fi
     done < "$1"
 
-    # Check for new files
+    # Check for new files. We don't care about new directories because if they don't contain any files it should be fine...
     for dir in "${directories[@]}"; do
         files=$(find "$dir")
 
