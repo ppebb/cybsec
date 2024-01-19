@@ -57,7 +57,10 @@ function prompt_y_n_quit() {
 }
 
 function prompt_install() {
-    if ! dpkg -l "$1" | grep -qw "no packages found matching $1"; then
+    # shellcheck disable=1090
+    . <({ derr=$({ dout=$(dpkg -l "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
+
+    if echo "$derr" | grep -qw "no packages found matching $1"; then
         if prompt_y_n "$1 is not installed. Install it now [y/N] "; then
             apt install "$1"
             return 0 # true
@@ -529,8 +532,8 @@ function unwanted_programs() {
 }
 
 function password_files() {
-    if ! command -v rg &> /dev/null; then
-        apt install ripgrep
+    if ! prompt_install "ripgrep"; then
+        return
     fi
 
     if [[ -f patterns ]]; then
@@ -543,7 +546,7 @@ function password_files() {
 
     echo "Checking for files containing passwords"
     # TODO: Any way to speed this up?
-    printf "Files containing passwords located in: %s" "$(rg --hidden --no-ignore --files-with-matches --fixed-strings -f patterns /home/)"
+    printf "Files containing passwords located in: \n%s" "$(rg --hidden --no-ignore --files-with-matches --fixed-strings -f patterns /home/)"
 }
 
 function list_units() {
