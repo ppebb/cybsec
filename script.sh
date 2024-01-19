@@ -58,18 +58,19 @@ function prompt_y_n_quit() {
 
 function prompt_install() {
     # shellcheck disable=1090
-    . <({ derr=$({ dout=$(dpkg -l "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
+    for package in $1; do
+        . <({ derr=$({ dout=$(dpkg -s "$package"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
 
-    if echo "$derr" | grep -qw "no packages found matching $1"; then
-        if prompt_y_n "$1 is not installed. Install it now [y/N] "; then
-            apt install "$1"
-            return 0 # true
-        else
-            return 1 # false
+        if echo "$derr" | grep -qw "is not installed"; then
+            if prompt_y_n "$package is not installed. Install it now [y/N] "; then
+                apt install "$package"
+            else
+                return 1 # false
+            fi
         fi
-    fi
+    done
 
-    return 0
+    return 0 # true
 }
 
 function check_perm() {
@@ -781,6 +782,17 @@ function diff_default_files() {
     shopt -u dotglob
 }
 
+function enable_se_linux() {
+    if ! prompt_install "selinux-utils selinux-basics"; then
+        return
+    fi
+
+    selinux-activate
+    selinux-config-enforcing
+
+    echo "Enabled selinux"
+}
+
 function print_help() {
     echo \
 "
@@ -875,6 +887,7 @@ funcs=(
     display_manager
     auditd
     diff_default_files
+    enable_se_linux
 )
 
 re='^[0-9]+$'
