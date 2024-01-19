@@ -56,12 +56,21 @@ function prompt_y_n_quit() {
     esac
 }
 
-function prompt_install() {
+# $1 package name
+function is_installed() {
     # shellcheck disable=1090
-    for package in $1; do
-        . <({ derr=$({ dout=$(dpkg -s "$package"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
+    . <({ derr=$({ dout=$(dpkg -s "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
 
-        if echo "$derr" | grep -qw "is not installed"; then
+    if echo "$derr" | grep -qw "is not installed"; then
+        return 1 # false
+    else
+        return 0 # true
+    fi
+}
+
+function prompt_install() {
+    for package in $1; do
+        if ! is_installed "$package"; then
             if prompt_y_n "$package is not installed. Install it now [y/N] "; then
                 apt install "$package"
             else
@@ -423,7 +432,7 @@ function setup_cracklib() {
         sed -i "s/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1/" "$commonpwd_conf"
     fi
 
-    if ! [[ -f "$commonauth_conf" ]] || ! grep -wq "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" < "$commonauth_conf"; then
+    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" < "$commonauth_conf"; then
         echo "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" >> "$commonauth_conf"
     fi
 
@@ -524,12 +533,13 @@ function remove_software() {
 }
 
 function unwanted_programs() {
-    installed=$(apt list --installed)
     for program in $potentially_bad_software; do
-        if echo "$installed" | grep -qw "$program"; then
+        if is_installed "$program"; then
             echo "Potentially unwanted program $program is installed, consider removing it if it should not be there"
         fi
     done
+
+    echo "Finished checking for unwanted programs"
 }
 
 function password_files() {
@@ -915,6 +925,7 @@ function menu() {
         return
     fi
 
+    echo
     ${funcs[$input]}
 }
 
