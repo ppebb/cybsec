@@ -93,6 +93,8 @@ function hash_all() {
         exit 1
     fi
 
+    echo "Hashing all files in ${directories[*]}"
+
     open_sem $N
     for dir in "${directories[@]}"; do
         files=$(find "$dir")
@@ -108,6 +110,8 @@ function check_all() {
     if ! prompt_install "xxhash"; then
         exit 1
     fi
+
+    echo "Checking all files in ${directories[*]}"
 
     # Create a dictionary??
     declare -A sums_by_file
