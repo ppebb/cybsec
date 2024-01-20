@@ -1,5 +1,45 @@
 #!/usr/bin/env bash
 
+# TODO: I wonder if I can just import these functions from the other script
+
+function prompt_y_n() {
+    read -p "$1" response
+
+    case "$response" in
+        [yY]*)
+            return 0 # true
+            ;;
+        *)
+            return 1 # false
+    esac
+}
+
+# $1 package name
+function is_installed() {
+    # shellcheck disable=1090
+    . <({ derr=$({ dout=$(dpkg -s "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
+
+    if echo "$derr" | grep -qw "is not installed"; then
+        return 1 # false
+    else
+        return 0 # true
+    fi
+}
+
+function prompt_install() {
+    for package in $1; do
+        if ! is_installed "$package"; then
+            if prompt_y_n "$package is not installed. Install it now [y/N] "; then
+                apt install "$package"
+            else
+                return 1 # false
+            fi
+        fi
+    done
+
+    return 0 # true
+}
+
 directories=(
     "/etc"
     #"/usr" # Don't check usr, has like 100k files...
@@ -36,15 +76,23 @@ N=1000
 function hash_inner() {
     perm=$(stat -c "%a" "$1")
     if [ -d "$1" ]; then
-        echo "d  $1  $perm" >> "$2"
+        if [ -n "$1" ]; then
+            echo "d  $1  $perm" >> "$2"
+        fi
         return
     fi
 
     sum=$(xxh64sum "$file")
-    echo "$sum  $perm" >> "$2"
+    if [ -n "$sum" ]; then
+        echo "$sum  $perm" >> "$2"
+    fi
 }
 
 function hash_all() {
+    if ! prompt_install "xxhash"; then
+        exit 1
+    fi
+
     open_sem $N
     for dir in "${directories[@]}"; do
         files=$(find "$dir")
@@ -57,6 +105,10 @@ function hash_all() {
 
 # This cannot be parallelized easily because I need to assign stuff to sums_by_file... oh well
 function check_all() {
+    if ! prompt_install "xxhash"; then
+        exit 1
+    fi
+
     # Create a dictionary??
     declare -A sums_by_file
 
@@ -66,7 +118,7 @@ function check_all() {
         local file="${split[1]}"
 
         if [ "${split[0]}" = "d" ]; then
-            local perm="${split[1]}"
+            local perm="${split[2]}"
         else
             local sum="${split[0]}"
             local perm="${split[2]}"
@@ -80,16 +132,16 @@ function check_all() {
         local newperm
         newperm=$(stat -c "%a" "$file")
 
-        if [ ! "$perm" -eq "$newperm" ]; then
+        if [ "$perm" != "$newperm" ]; then
             echo "$file changed permissions from $perm to $newperm" >> "perms.log"
         fi
 
-        if [ -v sum ]; then
+        if [ -v sum ] && [ ! -d "$file" ]; then
             sums_by_file[$file]=$sum
 
             newsum=$(xxh64sum "$file")
 
-            if [ "$line" != "$newsum" ]; then
+            if [ "$sum  $file" != "$newsum" ]; then
                 echo "$file" >> "changed.log"
             fi
         fi
@@ -104,6 +156,7 @@ function check_all() {
                 continue
             fi
 
+            # Sometimes gives false positives because of files that errored when hashing. Oh well.
             if [ -z "${sums_by_file["$file"]}" ]; then
                 echo "$file" >> "new.log"
             fi

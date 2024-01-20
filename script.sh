@@ -146,14 +146,15 @@ pass_min='7'
 pass_warn='7'
 
 # Permissive file search parameters
-perms_search_root='/home/'
-high_perm_min='700'
-high_perm_log='high-perms.log'
-world_writeable_log='world-writeable.log'
-no_user_log='world-writeable.log'
+perms_search_root="/home/"
+high_perm_min="700"
+high_perm_log="high-perms.log"
+world_writeable_log="world-writeable.log"
+no_user_log="world-writeable.log"
+setuid_gid_log="setuid_gid.log"
 
 potentially_bad_software="openssh-server nginx apache caddy postfix sendmail vsftpd smbd lighttpd" # TODO: add more because I keep forgetting
-bad_software="aircrack-ng deluge gameconqueror hashcat hydra john nmap openvpn qbittorrent telnet wireguard zenmap ophcrack nc netcat netcat-openbsd nikto wireshark tcpdump netcat-traditional"
+bad_software="aircrack-ng deluge gameconqueror hashcat hydra john john-data nmap openvpn qbittorrent telnet wireguard zenmap ophcrack nc netcat netcat-openbsd nikto wireshark tcpdump netcat-traditional minetest"
 
 media_files_raw=(
     # Audio formats
@@ -430,10 +431,17 @@ function setup_cracklib() {
     else
         sed -i "s/\(pam_unix\.so.*\)$/\1 remember=5 minlen=8/" "$commonpwd_conf"
         sed -i "s/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1/" "$commonpwd_conf"
+        sed -i "s/nullok_secure//" "$commonpwd_conf"
+        sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
     fi
 
     if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" < "$commonauth_conf"; then
         echo "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" >> "$commonauth_conf"
+    fi
+
+    # Remove null passwords
+    if [[ -f "$commonauth_conf" ]]; then
+        sed -i "s/nullok//" "$commonauth_conf"
     fi
 
     echo "Finished confiuring libpam-cracklib"
@@ -445,15 +453,19 @@ function lock_root() {
     echo "Locked root account"
 }
 
-function list_media() {
+function list_disallowed_files() {
     find "/home/" -type f \( "${media_files[@]}" \) > media_files.log
 
-    echo "Located media files, written to media_files.log"
+    find "/home/" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) > "downloaded_packages.log"
+
+    echo "Located media files and downloaded packages, written to logs"
 }
 
 kparams=(
-    # Turn on execshield
     "kernel.randomize_va_space=1"
+
+    # Block dmesg access from unprivileged users
+    "kernel.dmesg_restrict=1"
 
     # IP Spoofing protection
     "net.ipv4.conf.all.rp_filter=1"
@@ -477,6 +489,9 @@ kparams=(
     "net.ipv4.tcp_max_syn_backlog=2048"
     "net.ipv4.tcp_synack_retries=2"
     "net.ipv4.tcp_syn_retries=5"
+
+    # IPv4 TIME-WAIT assassination protection
+    "net.ipv4.tcp_ref1337=1"
 
     # Disable IP packet forwarding
     "net.ipv4.ip_forward=0"
@@ -574,6 +589,7 @@ files_needing_exec=(
 )
 
 function verify_perms() {
+    # These should be covered by the hashes but check them anyway just in case
     check_perm /etc/passwd 644 false
     check_perm /etc/group 644 false
     check_perm /etc/shadow 0 false
@@ -607,11 +623,15 @@ function verify_perms() {
     find "$perms_search_root" -type f -perm "-$high_perm_min" > "$high_perm_log"
     echo "Found $(wc -l < "$high_perm_log") files with permissions 700 or higher in $perms_search_root!"
 
+    # This should catch stick bits too I think because of -1000
     find "$perms_search_root" -xdev -type d \( -perm -0002 -a ! -perm -1000 \) > "$world_writeable_log"
-    echo "Found $(wc -l < "$high_perm_log") files with permissions 700 or higher in $perms_search_root!"
+    echo "Found $(wc -l < "$high_perm_log") world-writeable files in $perms_search_root!"
 
     find "$perms_search_root" -xdev \( -nouser -o -nogroup \) > "$no_user_log"
-    echo "Found $(wc -l < "$high_perm_log") files with permissions 700 or higher in $perms_search_root!"
+    echo "Found $(wc -l < "$high_perm_log") files missing a user or group in $perms_search_root!"
+
+    find "$perms_search_root" -perm /u=s,g=s > "$setuid_gid_log"
+    echo "Found $(wc -l < "$setuid_gid_log") files with setuid or setgid in $perms_search_root!"
 }
 
 function check_rc_local() {
@@ -696,7 +716,7 @@ lightdm_params=(
     "greeter-allow-guest=false"
     "greeter-hide-users=true"
     "greeter-show-manual-login=true"
-    "autologin-user=none"
+    #"autologin-user=$vm_user"
     "allow-guest=false"
 )
 
@@ -803,6 +823,16 @@ function enable_se_linux() {
     echo "Enabled selinux"
 }
 
+function fail2ban() {
+    if ! prompt_install "fail2ban"; then
+        return
+    fi
+
+    systemctl enable --now fail2ban.service
+
+    echo "Enabled fail2ban"
+}
+
 function print_help() {
     echo \
 "
@@ -882,7 +912,7 @@ funcs=(
     expiry
     setup_cracklib
     lock_root
-    list_media
+    list_disallowed_files
     kernel_parameters
     remove_software
     unwanted_programs
@@ -898,6 +928,7 @@ funcs=(
     auditd
     diff_default_files
     enable_se_linux
+    fail2ban
 )
 
 re='^[0-9]+$'
