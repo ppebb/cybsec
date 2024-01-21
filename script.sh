@@ -426,6 +426,10 @@ function setup_cracklib() {
 
     echo "Configuring libpam-cracklib"
 
+    echo "Backing up config in case something goes wrong"
+    cp "$commonpwd_conf" "$commonpwd_conf.bak"
+    cp "$commonauth_conf" "$commonauth_conf.bak"
+
     if [ ! -f "$commonpwd_conf" ]; then
         echo "$commonpwd_conf is missing"
     else
