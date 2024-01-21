@@ -1,44 +1,8 @@
 #!/usr/bin/env bash
 
-# TODO: I wonder if I can just import these functions from the other script
+set -e
 
-function prompt_y_n() {
-    read -p "$1" response
-
-    case "$response" in
-        [yY]*)
-            return 0 # true
-            ;;
-        *)
-            return 1 # false
-    esac
-}
-
-# $1 package name
-function is_installed() {
-    # shellcheck disable=1090
-    . <({ derr=$({ dout=$(dpkg -s "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
-
-    if echo "$derr" | grep -qw "is not installed"; then
-        return 1 # false
-    else
-        return 0 # true
-    fi
-}
-
-function prompt_install() {
-    for package in $1; do
-        if ! is_installed "$package"; then
-            if prompt_y_n "$package is not installed. Install it now [y/N] "; then
-                apt install "$package"
-            else
-                return 1 # false
-            fi
-        fi
-    done
-
-    return 0 # true
-}
+source ./utils.sh
 
 directories=(
     "/etc"
@@ -129,7 +93,7 @@ function check_all() {
         fi
 
         if [ ! -e "$file" ]; then
-            echo "$file" >> "missing.log"
+            echo "$file" >> "$log_base/missing.log"
             continue
         fi
 
@@ -137,7 +101,7 @@ function check_all() {
         newperm=$(stat -c "%a" "$file")
 
         if [ "$perm" != "$newperm" ]; then
-            echo "$file changed permissions from $perm to $newperm" >> "perms.log"
+            echo "$file changed permissions from $perm to $newperm" >> "$log_base/perms.log"
         fi
 
         if [ -v sum ] && [ ! -d "$file" ]; then
@@ -146,7 +110,7 @@ function check_all() {
             newsum=$(xxh64sum "$file")
 
             if [ "$sum  $file" != "$newsum" ]; then
-                echo "$file" >> "changed.log"
+                echo "$file" >> "$log_base/changed.log"
             fi
         fi
     done < "$1"
@@ -162,7 +126,7 @@ function check_all() {
 
             # Sometimes gives false positives because of files that errored when hashing. Oh well.
             if [ -z "${sums_by_file["$file"]}" ]; then
-                echo "$file" >> "new.log"
+                echo "$file" >> "$log_base/new.log"
             fi
 
         done

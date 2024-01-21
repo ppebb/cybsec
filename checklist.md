@@ -59,6 +59,7 @@ mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd
 
 ## Additional resources I've found which may be useful
 [Some checklist google doc](https://docs.google.com/document/d/1Sm8bEZyMhTZeXcWxqq5wF2_e7-zT92IM/edit) that contains useful checks and some application security for a couple things  
+[Another checklist google doc](https://docs.google.com/document/d/1NZB-XTPPZlUqQhfowbH0T5Gm6rkSfCb5EMYGE5aVfmY/edit) that might be useful. References some files that I don't have. Oh well.  
 [Linux checklist](https://gist.github.com/bobpaw/a0b6828a5cfa31cfe9007b711a36082f) that has some useful application security  
 [2020 writeup](https://sourque.com/ctf/hivestorm/hs20/) and [2021 writeup](https://sourque.com/ctf/hivestorm/hs21/) with lots of useful advice for BOTH linux and windows
 [sysctl explorer](https://sysctl-explorer.net/)  

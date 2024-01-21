@@ -1,299 +1,45 @@
 #!/usr/bin/env bash
 
-# Shut up both commands
-function pushd {
-	command pushd "$@" > /dev/null || return
-}
+# Exit if something errors to avoid something going terribly wrong...
+set -e
 
-function popd {
-	command popd > /dev/null || return
-}
+source ./utils.sh
 
-# Repeat a given character
-function repl() {
-    printf "$1"'%.s' $(eval "echo {1.."$(($2))"}")
-}
-
-function get_users() {
-    # The <65534 condition is to skip the nobody user
-    awk -F: '{if ($3 >= 1000 && $3 < 65534) print $1}' < /etc/passwd
-}
-
-# Pattern to match, text, file to check
-function edit_or_append() {
-    if grep -Eq "$1" "$3"; then
-        sed -Ei "s\`$1\`$2\`g" "$3"
-    else
-        echo "$2" >> "$3"
-    fi
-}
-
-function prompt_y_n() {
-    read -p "$1" response
-
-    case "$response" in
-        [yY]*)
-            return 0 # true
-            ;;
-        *)
-            return 1 # false
-    esac
-}
-
-function prompt_y_n_quit() {
-    read -p "$1" response
-
-    case "$response" in
-        [yY]*)
-            return 0 # true
-            ;;
-        [qQ]*)
-            return 2 # secret third option
-            ;;
-        *)
-            return 1 # false
-            ;;
-    esac
-}
-
-# $1 package name
-function is_installed() {
-    # shellcheck disable=1090
-    . <({ derr=$({ dout=$(dpkg -s "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
-
-    if echo "$derr" | grep -qw "is not installed"; then
-        return 1 # false
-    else
-        return 0 # true
-    fi
-}
-
-function prompt_install() {
-    for package in $1; do
-        if ! is_installed "$package"; then
-            if prompt_y_n "$package is not installed. Install it now [y/N] "; then
-                apt install "$package"
-            else
-                return 1 # false
-            fi
-        fi
-    done
-
-    return 0 # true
-}
-
-function check_perm() {
-    echo "Checking $1 permissions"
-    perm=$(stat -c '%a' "$1")
-    if [ "$perm" != "$2" ]; then
-        echo "Unexpected permission $perm for $1 (Expected: $2)"
-        if prompt_y_n "Fix permissions [y/N] "; then
-            chmod "$2" "$1"
-            echo "Changed $1 permissions to $2"
-        fi
-    fi
-}
-
-
-# $1 the split character
-# $2 the regex used by edit_or_append, able to access ::param:: and ::value::
-# $3 the path
-# $4 the array of parameters
-function apply_params_list() {
-    local split_char="$1"; shift
-    local regex_template="$1"; shift
-    local config_file="$1"; shift
-    local params=("$@")
-
-    for param_string in "${params[@]}"; do
-        IFS="$split_char" read -ra split <<< "$param_string"
-
-        local param="${split[0]}"
-        local value="${split[1]}"
-        local regex=${regex_template//::param::/$param}
-        regex=${regex//::value::/$value}
-
-        echo "Adding $param with value $value to $config_file"
-        edit_or_append "$regex" "$param = $value" "$config_file"
-    done
-}
-
-# Password expiry settings
-pass_max_exp='^PASS_MAX_DAYS\s+[0-9]+'
-pass_min_exp='^PASS_MIN_DAYS\s+[0-9]+'
-pass_warn_exp='^PASS_WARN_AGE\s+[0-9]+'
-
-# sshd settings
-ssh_root_exp='^PermitRootLogin\s+(yes|no)'
-ssh_empty_pass_exp='^PermitEmptyPasswords\s+(yes|no)'
-
-# APT settings
-apt_check_interval_exp='^APT::Periodic::Update-Package-Lists\s+"[0-9]+";'
-apt_download_upgradeable_exp='^APT::Periodic::Download-Upgradeable-Packages\s+"[0-9]+";'
-apt_autoclean_interval_exp='^APT::Periodic::AutocleanInterval\s+"[0-9]+";'
-apt_unattended_exp='^APT::Periodic::Unattended-Upgrade\s+"[0-9]+";'
-
-readme_exp="Authorized Administrators:(.*?)<b>Authorized Users:<\/b>(.*?)<\/pre>"
-
-# Config file locations
-sshd_conf='/etc/ssh/sshd_config'
-apt_periodic_conf='/etc/apt/apt.conf.d/10periodic'
-apt_autoupgrade_conf='/etc/apt/apt.conf.d/20auto-upgrades'
-
-# Password expiry settings
-pass_max='14'
-pass_min='7'
-pass_warn='7'
-
-# Permissive file search parameters
 perms_search_root="/home/"
 high_perm_min="700"
-high_perm_log="high-perms.log"
-world_writeable_log="world-writeable.log"
-no_user_log="world-writeable.log"
-setuid_gid_log="setuid_gid.log"
-
-potentially_bad_software="openssh-server nginx apache caddy postfix sendmail vsftpd smbd lighttpd" # TODO: add more because I keep forgetting
-bad_software="aircrack-ng deluge gameconqueror hashcat hydra john john-data nmap openvpn qbittorrent telnet wireguard zenmap ophcrack nc netcat netcat-openbsd nikto wireshark tcpdump netcat-traditional minetest"
-
-media_files_raw=(
-    # Audio formats
-    'aa'
-    'aac'
-    'aax'
-    'act'
-    'aif'
-    'aiff'
-    'alac'
-    'amr'
-    'ape'
-    'au'
-    'awb'
-    'dss'
-    'dvf'
-    'flac'
-    'gsm'
-    'iklax'
-    'ivs'
-    'm4a'
-    'm4b'
-    'mmf'
-    'mp3'
-    'mpc'
-    'msv'
-    'nmf'
-    'ogg'
-    'oga'
-    'mogg'
-    'opus'
-    'ra'
-    'raw'
-    'rf64'
-    'sln'
-    'tta'
-    'voc'
-    'vox'
-    'wav'
-    'wma'
-    'wv'
-    '8svx'
-    'cda'
-    # Video formats
-    'webm'
-    'mkv'
-    'flv'
-    'vob'
-    'ogv'
-    'ogg'
-    'drc'
-    'gif'
-    'gifv'
-    'mng'
-    'avi'
-    'mts'
-    'm2ts'
-    'mov'
-    'qt'
-    'wmv'
-    'yuv'
-    'rm'
-    'rmvb'
-    'viv'
-    'asf'
-    'amv'
-    'mp4'
-    'm4p'
-    'm4v'
-    'mpg'
-    'mp2'
-    'mpeg'
-    'mpe'
-    'mpv'
-    'm2v'
-    'svi'
-    '3gp'
-    '3g2'
-    'mxf'
-    'roq'
-    'nsv'
-    'f4v'
-    'f4p'
-    'f4a'
-    'f4b'
-    # Picture formats
-    'png'
-    'jpg'
-    'jpeg'
-    'jfif'
-    'exif'
-    'tif'
-    'tiff'
-    'gif'
-    'bmp'
-    'ppm'
-    'pgm'
-    'pbm'
-    'pnm'
-    'webp'
-    'heif'
-    'avif'
-    'ico'
-    'tga'
-    'psd'
-    'xcf'
-)
-
-# TODO: Who the fuck wrote this I need to edit it
-media_files=()
-
-# Convert list of extensions to parameters for find command
-for extension in "${media_files_raw[@]}"; do
-    if [ $media_files ]; then media_files+=('-o'); fi
-    media_files+=('-iname')
-    media_files+=("*.$extension")
-done
+high_perm_log="$log_base/high-perms.log"
+world_writeable_log="$log_base/world-writeable.log"
+world_readable_log="$log_base/world_readable.log"
+no_user_log="$log_base/world-writeable.log"
+setuid_gid_log="$log_base/setuid_gid.log"
+media_files_log="$log_base/media_files.log"
+downloaded_packages_log="$log_base/downloaded_packages.log"
 
 function update() {
     echo "Running full system upgrade"
 
-    # TODO: I forgot the dist upgrade command, this may need to be edited
+    if [ -n "$(apt-mark showhold)" ]; then
+        echo "Some packages were held back. Unholding"
+        apt-mark unhold "*"
+    fi
+
     apt update && apt upgrade -y && apt dist-upgrade -y
 
     echo "Done updating"
 }
 
+# APT settings
+apt_periodic_conf="/etc/apt/apt.conf.d/10periodic"
+apt_autoupgrade_conf="/etc/apt/apt.conf.d/20auto-upgrades"
+apt_settings=(
+    "APT::Periodic::Update-Package-Lists \"1\";"
+    "APT::Periodic::Download-Upgradeable-Packages \"1\";"
+    "APT::Periodic::AutocleanInterval \"7\";"
+    "APT::Periodic::Unattended-Upgrade \"1\";"
+)
+
 function auto_update() {
-    edit_or_append "$apt_check_interval_exp" 'APT::Periodic::Update-Package-Lists "1";' "$apt_periodic_conf"
-    echo "Enabled daily update checks"
-
-    edit_or_append "$apt_download_upgradeable_exp" 'APT::Periodic::Download-Upgradeable-Packages "1";' "$apt_periodic_conf"
-    echo "Enabled auto-downloading upgradeable packages"
-
-    edit_or_append "$apt_autoclean_interval_exp" 'APT::Periodic::AutocleanInterval "7";' "$apt_periodic_conf"
-    echo "Enabled weekly autoclean"
-
-    edit_or_append "$apt_unattended_exp" 'APT::Periodic::Unattended-Upgrade "1";' "$apt_periodic_conf"
-    echo "Enabled unattended upgrades"
+    apply_params_list " " "^::param::\s*\"[0-9]" "$apt_periodic_conf" "${apt_settings[@]}"
 
     cp -f "$apt_periodic_conf" "$apt_autoupgrade_conf"
 
@@ -307,6 +53,15 @@ function firewall() {
 
     echo "Installed and configured ufw"
 }
+
+admin_groups=(
+    "admin"
+    "wheel"
+    "staff"
+    "sudo"
+    "adm"
+    "lpadmin"
+)
 
 function manage_users() {
     if ! [[ -v admins ]]; then
@@ -322,10 +77,16 @@ function manage_users() {
     users=$(get_users)
 
     for user in $users; do
+        if ! user_exists "$user"; then
+            echo "Attempted to check user '$user', but they do not exist"
+            continue
+        fi
+
         if ! [[ "$allowed_users" == *"$user"* ]] && ! [[ "$admins" == *"$user"* ]]; then
-             if prompt_y_n "Unauthorized user $user found, delete the user? [y/N] "; then
-                 echo "Deleting user $user"
+             if prompt_y_n "Unauthorized user '$user' found, delete the user? [y/N] "; then
+                 echo "Deleting user '$user'"
                  userdel "$user"
+                 continue
              fi
         fi
 
@@ -338,23 +99,19 @@ function manage_users() {
             continue
         fi
 
-        # shellcheck disable=2031
-        if echo "$gout" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers"; then
-            if ! [[ "$admins" == *"$user"* ]]; then
-                if prompt_y_n "User $user appears to be an admin when they should not be, attempt to remove the group? [y/N] "; then
-                    # TODO: Maybe don't just try every group??
-                    echo "Removing user from groups admin, wheel, staff, sudo, sudoers"
-                    gpasswd -d "$user" admin
-                    gpasswd -d "$user" wheel
-                    gpasswd -d "$user" staff
-                    gpasswd -d "$user" sudo
-                    gpasswd -d "$user" sudoers
+        for group in "${admin_groups[@]}"; do
+            # shellcheck disable=2031
+            if echo "$gout" | grep -qw "$group" && ! [[ "$admins" == *"$user"* ]]; then
+                if prompt_y_n "User $user is part of group $group when they should not be. Remove them from the group? [y/N]"; then
+                    echo "Removing $user from $group"
+                    gpasswd -d "$user" "$group"
                 fi
             fi
-        fi
+        done
     done
 
     for user in $admins; do
+        # Don't need to check user_exists. This should catch everything I hope
         # shellcheck disable=1090
         . <({ gerr=$({ gout=$(groups "$user"); } 2>&1; declare -p gout >&2); declare -p gerr; } 2>&1)
 
@@ -363,28 +120,27 @@ function manage_users() {
             continue
         fi
 
-        if ! echo "$user" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers"; then
+        if ! echo "$user" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers\|adm\|lpadm"; then
             echo "User $user appears not to be an administrator when they should be"
         fi
     done
 
     echo
-    printf "Check for weird admins\n: %s" "$(mawk -F: '$1 == "sudo"' /etc/group) \n"
-    printf "Check for weird users\n: %s" "$(mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd) \n"
-    printf "Check for empty passwords\n: %s" "$(mawk -F: '$2 == ""' /etc/passwd) \n"
-    printf "Check for empty passwords\n: %s" "$(mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd) \n"
-    echo
-    echo "All available users to check against for anything this missed: "
-    echo "$users"
-    echo
+    printf "Check for weird admins:\n %s \n" "$(mawk -F: '$1 == "sudo"' /etc/group) \n"
+    printf "Check for weird users:\n %s \n" "$(mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd) \n"
+    printf "Check for empty passwords:\n %s \n" "$(mawk -F: '$2 == ""' /etc/passwd) \n"
+    printf "Check for empty passwords:\n %s \n" "$(mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd) \n"
 
     echo "Done managing users"
 }
 
 function change_passwords() {
-    echo "$allowed_users"
-
     for user in $allowed_users; do
+        if ! user_exists "$user"; then
+            echo "Attempted to check user '$user', but they do not exist"
+            continue
+        fi
+
         echo "Changing password for $user"
         echo "$user:rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md" | chpasswd
     done
@@ -410,7 +166,7 @@ login_params=(
 )
 
 function expiry() {
-    apply_params_list "=" "^::param::\s*=\s*(YES|NO|[0-9]*)" "/etc/login.defs" "${login_params[@]}"
+    apply_params_list "=" "^::param::\s*=\s*YES|NO|[0-9]*" "/etc/login.defs" "${login_params[@]}"
 
     echo "Finished configuring login.defs"
 }
@@ -418,8 +174,11 @@ function expiry() {
 commonpwd_conf="/etc/pam.d/common-password"
 commonauth_conf="/etc/pam.d/common-auth"
 
+# WARN: This fucking breaks on ubuntu 22 AND debian 11 for some reason. I don't know if it's because of pwquality conflicting with cracklib or because I fucked up a setting. Kill me.
+# TODO: Setup pwquality. Figure out what a gdm "correctly configured authentication stack"
+# TODO: What the fuck is a GECOS field. GECOS pw strength checks
+# TODO: Apparently invididual users can have a minimum password age? Maybe figure out how to reset the time data of user passwords. I think reassigning every user a new password should do it...
 function setup_cracklib() {
-    # TODO: Change to edit or append
     if ! prompt_install "libpam-cracklib"; then
         return
     fi
@@ -457,10 +216,22 @@ function lock_root() {
     echo "Locked root account"
 }
 
-function list_disallowed_files() {
-    find "/home/" -type f \( "${media_files[@]}" \) > media_files.log
+media_files_raw=( "aa" "aac" "aax" "act" "aif" "aiff" "alac" "amr" "ape" "au" "awb" "dss" "dvf" "flac" "gsm" "iklax" "ivs" "m4a" "m4b" "mmf" "mp3" "mpc" "msv" "nmf" "ogg" "oga" "mogg" "opus" "ra" "raw" "rf64" "sln" "tta" "voc" "vox" "wav" "wma" "wv" "8svx" "cda" "webm" "mkv" "flv" "vob" "ogv" "ogg" "drc" "gif" "gifv" "mng" "avi" "mts" "m2ts" "mov" "qt" "wmv" "yuv" "rm" "rmvb" "viv" "asf" "amv" "mp4" "m4p" "m4v" "mpg" "mp2" "mpeg" "mpe" "mpv" "m2v" "svi" "3gp" "3g2" "mxf" "roq" 'nsv' "f4v" "f4p" "f4a" "f4b" "png" "jpg" "jpeg" "jfif" "exif" "tif" "tiff" "gif" "bmp" "ppm" "pgm" "pbm" "pnm" "webp" "heif" "avif" "ico" "tga" "psd" "xcf" )
 
-    find "/home/" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) > "downloaded_packages.log"
+# TODO: Who the fuck wrote this I need to edit it
+media_files=()
+
+# Convert list of extensions to parameters for find command
+for extension in "${media_files_raw[@]}"; do
+    if [ $media_files ]; then media_files+=('-o'); fi
+    media_files+=('-iname')
+    media_files+=("*.$extension")
+done
+
+function list_disallowed_files() {
+    find "/home/" -type f \( "${media_files[@]}" \) > "$media_files_log"
+
+    find "/home/" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) > "$downloaded_packages_log"
 
     echo "Located media files and downloaded packages, written to logs"
 }
@@ -495,7 +266,7 @@ kparams=(
     "net.ipv4.tcp_syn_retries=5"
 
     # IPv4 TIME-WAIT assassination protection
-    "net.ipv4.tcp_ref1337=1"
+    # "net.ipv4.tcp_ref1337=1" # This doesn't work
 
     # Disable IP packet forwarding
     "net.ipv4.ip_forward=0"
@@ -545,16 +316,20 @@ function kernel_parameters() {
     echo "Finished checking kernel parameters in $kp_conf"
 }
 
-function remove_software() {
-    apt purge "$bad_software"
+bad_software_list=("aircrack-ng" "deluge" "gameconqueror" "hashcat" "hydra" "john" "john-data" "nmap" "openvpn" "qbittorrent" "telnet" "wireguard" "zenmap" "ophcrack" "nc" "netcat" "netcat-openbsd" "nikto" "wireshark" "tcpdump" "netcat-traditional" "minetest")
+
+function bad_software() {
+    apt purge "${bad_software_list[*]}"
 
     echo "Removed disallowed software"
 }
 
+potentially_unwanted_software=("openssh-server" "nginx" "apache" "caddy" "postfix" "sendmail" "vsftpd" "smbd" "lighttpd") # TODO: add more because I keep forgetting
+
 function unwanted_programs() {
-    for program in $potentially_bad_software; do
+    for program in "${potentially_unwanted_software[@]}"; do
         if is_installed "$program"; then
-            echo "Potentially unwanted program $program is installed, consider removing it if it should not be there"
+            echo "Potentially unwanted program $program is installed, consider removing it if it is not a critical service"
         fi
     done
 
@@ -575,14 +350,32 @@ function password_files() {
     done
 
     echo "Checking for files containing passwords"
-    # TODO: Any way to speed this up?
     printf "Files containing passwords located in: \n%s" "$(rg --hidden --no-ignore --files-with-matches --fixed-strings -f patterns /home/)"
 }
 
+# This isn't even close to comprehensive. Should add more probably (definitely)
+potentially_unwanted_units=(
+    "nginx.service"
+    "apache.service"
+    "nfs.service"
+    "containerd.service"
+    "smbd.service"
+    "bind9.service"
+    "openarena.service"
+)
+
 function list_units() {
-    echo "Check enabled units for anything unwanted"
-    systemctl list-units --type=service --state=active
-    echo
+    units=$(systemctl list-units --type=service --state=active)
+
+    for service in "${potentially_unwanted_units[@]}"; do
+        if echo "$units" | grep -iqw "$service"; then
+            echo "Potentially unwanted service '$service' is enabled"
+        fi
+    done
+
+    if prompt_y_n "Check enabled units for anything else unwanted [y/N]"; then
+        systemctl list-units --type=service --state=active
+    fi
 }
 
 # Hoping there aren't more or else they'll lose exec permissions...
@@ -590,6 +383,8 @@ files_needing_exec=(
     ".profile"
     ".bashrc"
     ".bash_logout"
+    "hash.sh"
+    "script.sh"
 )
 
 function verify_perms() {
@@ -627,7 +422,7 @@ function verify_perms() {
     find "$perms_search_root" -type f -perm "-$high_perm_min" > "$high_perm_log"
     echo "Found $(wc -l < "$high_perm_log") files with permissions 700 or higher in $perms_search_root!"
 
-    # This should catch stick bits too I think because of -1000
+    # This should catch sticky bits too I think because of -1000
     find "$perms_search_root" -xdev -type d \( -perm -0002 -a ! -perm -1000 \) > "$world_writeable_log"
     echo "Found $(wc -l < "$high_perm_log") world-writeable files in $perms_search_root!"
 
@@ -636,6 +431,9 @@ function verify_perms() {
 
     find "$perms_search_root" -perm /u=s,g=s > "$setuid_gid_log"
     echo "Found $(wc -l < "$setuid_gid_log") files with setuid or setgid in $perms_search_root!"
+
+    find "$perms_search_root" -perm -o=r > "$world_readable_log"
+    echo "Found $(wc -l < "$world_readable_log") world-readable files in $perms_search_root!"
 }
 
 function check_rc_local() {
@@ -712,15 +510,12 @@ function clamav() {
     clamscan / --log --recursive -- verbose
 }
 
-lightdm_conf="/etc/lightdm/lightdm.conf"
-
 # Not sure if these parameters will work
-
+lightdm_conf="/etc/lightdm/lightdm.conf"
 lightdm_params=(
     "greeter-allow-guest=false"
     "greeter-hide-users=true"
     "greeter-show-manual-login=true"
-    #"autologin-user=$vm_user"
     "allow-guest=false"
 )
 
@@ -730,10 +525,11 @@ gdm3_params=(
     "disable-restart-buttons=true"
 )
 
-gdm3_custom_conf="/etc/gdm3/custom.conf"
-gdm3_custom_params=(
-    "AutomaticLoginEnable=false"
-)
+# Gdm3 custom is off because I shouldn't be turning off automatic login. What was I thinking
+# gdm3_custom_conf="/etc/gdm3/custom.conf"
+# gdm3_custom_params=(
+#     "AutomaticLoginEnable=false"
+# )
 
 function display_manager() {
     if [ -f "$lightdm_conf" ]; then
@@ -746,10 +542,10 @@ function display_manager() {
         apply_params_list "=" "^::param::\s*=\s*true|false" "$gdm3_conf" "${gdm3_params[@]}"
     fi
 
-    if [ -f "$gdm3_custom_conf" ]; then
-        echo "Fixing $gdm3_custom_conf settings"
-        apply_params_list "=" "^::param::\s*=\s*true|false" "$gdm3_custom_conf" "${gdm3_custom_params[@]}"
-    fi
+    # if [ -f "$gdm3_custom_conf" ]; then
+    #     echo "Fixing $gdm3_custom_conf settings"
+    #     apply_params_list "=" "^::param::\s*=\s*true|false" "$gdm3_custom_conf" "${gdm3_custom_params[@]}"
+    # fi
 }
 
 function auditd() {
@@ -816,17 +612,6 @@ function diff_default_files() {
     shopt -u dotglob
 }
 
-function enable_se_linux() {
-    if ! prompt_install "selinux-utils selinux-basics"; then
-        return
-    fi
-
-    selinux-activate
-    selinux-config-enforcing
-
-    echo "Enabled selinux"
-}
-
 function fail2ban() {
     if ! prompt_install "fail2ban"; then
         return
@@ -847,7 +632,7 @@ Usage: script.sh [OPTIONS]
  --readme                      Link to grab readme from; will be parsed for authorized users and administrators
 "
 }
-# TODO: Should add smb, ssh, vsftp, apache, and more secure configurations eventually
+# TODO: Should add smb, ssh, vsftp, apache, php, mysql, postgresql and more secure configurations eventually
 
 # SCRIPT BEGINS HERE!!!!!!
 
@@ -874,6 +659,8 @@ while [[ $# -gt 0 ]]; do
         --users)
             ;;
         --readme)
+            readme_exp="Authorized Administrators:(.*?)<b>Authorized Users:<\/b>(.*?)<\/pre>"
+
             file=$(echo -n "$2" | md5sum | awk '{print $1}')
             file="$file.urlhash"
 
@@ -886,6 +673,7 @@ while [[ $# -gt 0 ]]; do
             fi
 
             # PRAYING THIS WORKS OR I'LL KILL MYSELF
+            # Update: It works. I'm not killing myself
             if [[ $text =~ $readme_exp ]]; then
                 admins="${BASH_REMATCH[1]}"
                 allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
@@ -918,7 +706,7 @@ funcs=(
     lock_root
     list_disallowed_files
     kernel_parameters
-    remove_software
+    bad_software
     unwanted_programs
     password_files
     list_units
@@ -931,7 +719,6 @@ funcs=(
     display_manager
     auditd
     diff_default_files
-    enable_se_linux
     fail2ban
 )
 
