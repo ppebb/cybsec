@@ -126,7 +126,7 @@ function apply_params_list() {
         regex=${regex//::value::/$value}
 
         echo "Adding $param with value $value to $config_file"
-        edit_or_append "$regex" "$param = $value" "$config_file"
+        edit_or_append "$regex" "$param_string" "$config_file"
     done
 }
 
