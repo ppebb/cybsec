@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+#TODO: FIX AUTOUPDATE REGEX
+#TODO: FIX UNINSTALLING BAD SOFTWARE
+#TODO: FIX LOGIN.DEFS
+
 # Exit if something errors to avoid something going terribly wrong...
 set -e
 
