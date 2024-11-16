@@ -4,7 +4,7 @@ set -e
 
 # Log file definitions
 export log_base="./logs"
-mkdir -P "$log_base"
+mkdir -p "$log_base"
 
 # Shut up both commands
 function pushd {
