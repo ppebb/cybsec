@@ -289,7 +289,7 @@ function list_disallowed_files() {
 }
 
 kparams=(
-    "kernel.randomize_va_space=1"
+    "kernel.randomize_va_space=2"
 
     # Block dmesg access from unprivileged users
     "kernel.dmesg_restrict=1"
@@ -322,9 +322,11 @@ kparams=(
 
     # Disable IP packet forwarding
     "net.ipv4.ip_forward=0"
+    "net.ipv4.conf.all.forwarding=0"
 
     # Log Martians
     "net.ipv4.conf.all.log_martians=1"
+    "net.ipv4.conf.default.log_martians=1"
     "net.ipv4.icmp_ignore_bogus_error_responses=1"
 
     # Ignore ICMP redirects
@@ -335,6 +337,27 @@ kparams=(
 
     # Ignore Directed pings
     "net.ipv4.icmp_echo_ignore_all=1"
+
+    # Additional config suggested by lynis
+    "dev.tty.ldisc_autoload=0"
+    "fs.protected_fifos=2"
+    "fs.protected_hardlinks=1"
+    "fs.protected_regular=2"
+    "fs.protected_symlinks=1"
+    "fs.suid_dumpable=0"
+    "kernel.core_uses_pid=1"
+    "kernel.ctrl-alt-del=0"
+    "kernel.kptr_restrict=2"
+    "kernel.modules_disabled=1"
+    "kernel.perf_event_paranoid=2"
+    "kernel.sysrq=0"
+    "kernel.unprivileged_bpf_disabled=1"
+    "kernel.yama.ptrace_scope=1"
+    "net.core.bpf_jit_harden=2"
+    "net.ipv4.conf.all.bootp_relay=0"
+    "net.ipv4.conf.all.mc_forwarding=0"
+    "net.ipv4.conf.all.proxy_arp=0"
+    "net.ipv4.tcp_timestamps=0"
 )
 
 kp_conf="/etc/sysctl.conf"
@@ -376,7 +399,7 @@ function bad_software() {
     echo "Removed disallowed software"
 }
 
-potentially_unwanted_software=("openssh-server" "nginx" "apache" "caddy" "postfix" "sendmail" "vsftpd" "smbd" "lighttpd") # TODO: add more because I keep forgetting
+potentially_unwanted_software=("openssh-server" "nginx" "apache" "apache2" "bind9" "caddy" "postfix" "sendmail" "vsftpd" "smbd" "lighttpd") # TODO: add more because I keep forgetting
 
 function unwanted_programs() {
     for program in "${potentially_unwanted_software[@]}"; do
@@ -409,6 +432,7 @@ function password_files() {
 potentially_unwanted_units=(
     "nginx.service"
     "apache.service"
+    "apache2.service"
     "nfs.service"
     "containerd.service"
     "smbd.service"
@@ -685,6 +709,7 @@ Usage: script.sh [OPTIONS]
 "
 }
 # TODO: Should add smb, ssh, vsftp, apache, php, mysql, postgresql and more secure configurations eventually
+# NOTE: Apache gives points for setting tokens to prod and disabling signatures or something like that.
 
 # SCRIPT BEGINS HERE!!!!!!
 
