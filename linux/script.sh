@@ -87,16 +87,22 @@ function manage_users() {
         fi
 
         if ! [[ "$allowed_users" == *"$user"* ]] && ! [[ "$admins" == *"$user"* ]]; then
-             if prompt_y_n "Unauthorized user '$user' found, delete the user? [y/N] "; then
-                 echo "Deleting user '$user'"
-                 userdel "$user"
-                 continue
-             fi
+            if prompt_y_n "Unauthorized user '$user' found, delete the user? [y/N] "; then
+                echo "Deleting user '$user'"
+                userdel "$user"
+                continue
+            fi
         fi
 
         # Neat little trick to get both stdout and stderr
         # shellcheck disable=1090,2030
-        . <({ gerr=$({ gout=$(groups "$user"); } 2>&1; declare -p gout >&2); declare -p gerr; } 2>&1)
+        . <({
+            gerr=$(
+                { gout=$(groups "$user"); } 2>&1
+                declare -p gout >&2
+            )
+            declare -p gerr
+        } 2>&1)
 
         if [ -n "$gerr" ]; then
             echo "Error '$gerr' when attempting to check groups of $user"
@@ -117,7 +123,13 @@ function manage_users() {
     for user in $admins; do
         # Don't need to check user_exists. This should catch everything I hope
         # shellcheck disable=1090
-        . <({ gerr=$({ gout=$(groups "$user"); } 2>&1; declare -p gout >&2); declare -p gerr; } 2>&1)
+        . <({
+            gerr=$(
+                { gout=$(groups "$user"); } 2>&1
+                declare -p gout >&2
+            )
+            declare -p gerr
+        } 2>&1)
 
         if [ -n "$gerr" ]; then
             echo "Error '$gerr' when attempting to check groups of $user"
@@ -202,8 +214,8 @@ function setup_cracklib() {
         sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
     fi
 
-    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" < "$commonauth_conf"; then
-        echo "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" >> "$commonauth_conf"
+    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" <"$commonauth_conf"; then
+        echo "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" >>"$commonauth_conf"
     fi
 
     # Remove null passwords
@@ -220,7 +232,7 @@ function lock_root() {
     echo "Locked root account"
 }
 
-media_files_raw=( "aa" "aac" "aax" "act" "aif" "aiff" "alac" "amr" "ape" "au" "awb" "dss" "dvf" "flac" "gsm" "iklax" "ivs" "m4a" "m4b" "mmf" "mp3" "mpc" "msv" "nmf" "ogg" "oga" "mogg" "opus" "ra" "raw" "rf64" "sln" "tta" "voc" "vox" "wav" "wma" "wv" "8svx" "cda" "webm" "mkv" "flv" "vob" "ogv" "ogg" "drc" "gif" "gifv" "mng" "avi" "mts" "m2ts" "mov" "qt" "wmv" "yuv" "rm" "rmvb" "viv" "asf" "amv" "mp4" "m4p" "m4v" "mpg" "mp2" "mpeg" "mpe" "mpv" "m2v" "svi" "3gp" "3g2" "mxf" "roq" 'nsv' "f4v" "f4p" "f4a" "f4b" "png" "jpg" "jpeg" "jfif" "exif" "tif" "tiff" "gif" "bmp" "ppm" "pgm" "pbm" "pnm" "webp" "heif" "avif" "ico" "tga" "psd" "xcf" )
+media_files_raw=("aa" "aac" "aax" "act" "aif" "aiff" "alac" "amr" "ape" "au" "awb" "dss" "dvf" "flac" "gsm" "iklax" "ivs" "m4a" "m4b" "mmf" "mp3" "mpc" "msv" "nmf" "ogg" "oga" "mogg" "opus" "ra" "raw" "rf64" "sln" "tta" "voc" "vox" "wav" "wma" "wv" "8svx" "cda" "webm" "mkv" "flv" "vob" "ogv" "ogg" "drc" "gif" "gifv" "mng" "avi" "mts" "m2ts" "mov" "qt" "wmv" "yuv" "rm" "rmvb" "viv" "asf" "amv" "mp4" "m4p" "m4v" "mpg" "mp2" "mpeg" "mpe" "mpv" "m2v" "svi" "3gp" "3g2" "mxf" "roq" 'nsv' "f4v" "f4p" "f4a" "f4b" "png" "jpg" "jpeg" "jfif" "exif" "tif" "tiff" "gif" "bmp" "ppm" "pgm" "pbm" "pnm" "webp" "heif" "avif" "ico" "tga" "psd" "xcf")
 
 # TODO: Who the fuck wrote this I need to edit it
 media_files=()
@@ -233,9 +245,9 @@ for extension in "${media_files_raw[@]}"; do
 done
 
 function list_disallowed_files() {
-    find "/home/" -type f \( "${media_files[@]}" \) > "$media_files_log"
+    find "/home/" -type f \( "${media_files[@]}" \) >"$media_files_log"
 
-    find "/home/" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) > "$downloaded_packages_log"
+    find "/home/" -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" -o -name "*.deb" \) >"$downloaded_packages_log"
 
     echo "Located media files and downloaded packages, written to logs"
 }
@@ -307,7 +319,7 @@ function kernel_parameters() {
     sysctl_out=$(sysctl -p)
 
     for param_string in "${kparams[@]}"; do
-        IFS="=" read -ra split <<< "$param_string"
+        IFS="=" read -ra split <<<"$param_string"
 
         local param="${split[0]}"
         local value="${split[1]}"
@@ -350,7 +362,7 @@ function password_files() {
     fi
 
     for password in $passwords; do
-        echo "$password" >> patterns
+        echo "$password" >>patterns
     done
 
     echo "Checking for files containing passwords"
@@ -402,13 +414,13 @@ function verify_perms() {
     for i in $(mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd); do
         if [ ! -d "/home/${i}" ]; then
             echo "No home directory for user $i"
-            continue;
+            continue
         else
             echo "Fixing permissions for directory /home/$i"
         fi
 
         # output to temp file because looping through find output is a pain in the ass otherwise...
-        find "/home/${i}" > tmphomefiles
+        find "/home/${i}" >tmphomefiles
 
         while IFS= read -r file; do
             if [ -d "$file" ] || [[ "${files_needing_exec[*]}" == *$(basename "$file")* ]]; then
@@ -416,28 +428,28 @@ function verify_perms() {
             elif [ -f "$file" ]; then
                 chmod 600 "$file"
             fi
-        done < tmphomefiles
+        done <tmphomefiles
 
         if [ -f tmphomefiles ]; then
             rm tmphomefiles
         fi
     done
 
-    find "$perms_search_root" -type f -perm "-$high_perm_min" > "$high_perm_log"
-    echo "Found $(wc -l < "$high_perm_log") files with permissions 700 or higher in $perms_search_root!"
+    find "$perms_search_root" -type f -perm "-$high_perm_min" >"$high_perm_log"
+    echo "Found $(wc -l <"$high_perm_log") files with permissions 700 or higher in $perms_search_root!"
 
     # This should catch sticky bits too I think because of -1000
-    find "$perms_search_root" -xdev -type d \( -perm -0002 -a ! -perm -1000 \) > "$world_writeable_log"
-    echo "Found $(wc -l < "$high_perm_log") world-writeable files in $perms_search_root!"
+    find "$perms_search_root" -xdev -type d \( -perm -0002 -a ! -perm -1000 \) >"$world_writeable_log"
+    echo "Found $(wc -l <"$high_perm_log") world-writeable files in $perms_search_root!"
 
-    find "$perms_search_root" -xdev \( -nouser -o -nogroup \) > "$no_user_log"
-    echo "Found $(wc -l < "$high_perm_log") files missing a user or group in $perms_search_root!"
+    find "$perms_search_root" -xdev \( -nouser -o -nogroup \) >"$no_user_log"
+    echo "Found $(wc -l <"$high_perm_log") files missing a user or group in $perms_search_root!"
 
-    find "$perms_search_root" -perm /u=s,g=s > "$setuid_gid_log"
-    echo "Found $(wc -l < "$setuid_gid_log") files with setuid or setgid in $perms_search_root!"
+    find "$perms_search_root" -perm /u=s,g=s >"$setuid_gid_log"
+    echo "Found $(wc -l <"$setuid_gid_log") files with setuid or setgid in $perms_search_root!"
 
-    find "$perms_search_root" -perm -o=r > "$world_readable_log"
-    echo "Found $(wc -l < "$world_readable_log") world-readable files in $perms_search_root!"
+    find "$perms_search_root" -perm -o=r >"$world_readable_log"
+    echo "Found $(wc -l <"$world_readable_log") world-readable files in $perms_search_root!"
 }
 
 function check_rc_local() {
@@ -452,9 +464,9 @@ function check_rc_local() {
 function disable_hardware() {
     echo "Disabling usb-storage, firewire, and thunderbolt"
 
-    echo "install usb-storage /bin/true" > /etc/modprobe.d/disable-usb-storage.conf
-    echo "blacklist firewire-core" > /etc/modprobe.d/firewire.conf
-    echo "blacklist thunderbolt" > /etc/modprobe.d/thunderbolt.conf
+    echo "install usb-storage /bin/true" >/etc/modprobe.d/disable-usb-storage.conf
+    echo "blacklist firewire-core" >/etc/modprobe.d/firewire.conf
+    echo "blacklist thunderbolt" >/etc/modprobe.d/thunderbolt.conf
 
     echo "Disabled hardware"
 }
@@ -474,7 +486,7 @@ function check_crontabs() {
         prompt_y_n_quit "View contents of $file [y/N/q] "
         response=$?
         if [ $response -eq 0 ]; then
-            less < "$file"
+            less <"$file"
         elif [ $response -eq 2 ]; then
             break
         fi
@@ -586,7 +598,7 @@ function diff_default_files() {
     shopt -s dotglob
 
     # These files contain default, safe configurations and their hashes with user home local paths
-    if [ ! -d "./default_files/" ]; then
+    if ! [ -d "./default_files/" ]; then
         echo "Missing default_files directory. Please get them from the repo before continuing"
         return
     fi
@@ -628,7 +640,7 @@ function fail2ban() {
 
 function print_help() {
     echo \
-"
+        "
 ppeb's cyber patriot linux script!!!
 
 Usage: script.sh [OPTIONS]
@@ -656,46 +668,45 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help)
-            print_help
-            exit
+    -h | --help)
+        print_help
+        exit
         ;;
-        --users)
-            ;;
-        --readme)
-            readme_exp="Authorized Administrators:(.*?)<b>Authorized Users:<\/b>(.*?)<\/pre>"
+    --users) ;;
+    --readme)
+        readme_exp="Authorized Administrators:(.*?)<b>Authorized Users:<\/b>(.*?)<\/pre>"
 
-            file=$(echo -n "$2" | md5sum | awk '{print $1}')
-            file="$file.urlhash"
+        file=$(echo -n "$2" | md5sum | awk '{print $1}')
+        file="$file.urlhash"
 
-            # Hash the url and write it to a file so repeated requests aren't made
-            if [ ! -e "$file" ]; then
-                text=$(curl "$2")
-                echo "$text" > "$file"
-            else
-                text=$(cat "$file")
-            fi
+        # Hash the url and write it to a file so repeated requests aren't made
+        if [ ! -e "$file" ]; then
+            text=$(curl "$2")
+            echo "$text" >"$file"
+        else
+            text=$(cat "$file")
+        fi
 
-            # PRAYING THIS WORKS OR I'LL KILL MYSELF
-            # Update: It works. I'm not killing myself
-            if [[ $text =~ $readme_exp ]]; then
-                admins="${BASH_REMATCH[1]}"
-                allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
-                admins=${admins#*$'\n'}
-                # There should no longer be random newlines here
-                passwords=$(echo "$admins" | grep "password" | sed "s/password: //g" | sed "s/^[ \t]*//" )
-                admins=$(echo "$admins" | grep -v "password" | sed "s/(you)//g" | tr -d "\r")
-                vm_user=$(echo "$admins" | head -n1  | tr -cd "[:alnum:]._-")
-            fi
+        # PRAYING THIS WORKS OR I'LL KILL MYSELF
+        # Update: It works. I'm not killing myself
+        if [[ $text =~ $readme_exp ]]; then
+            admins="${BASH_REMATCH[1]}"
+            allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
+            admins=${admins#*$'\n'}
+            # There should no longer be random newlines here
+            passwords=$(echo "$admins" | grep "password" | sed "s/password: //g" | sed "s/^[ \t]*//")
+            admins=$(echo "$admins" | grep -v "password" | sed "s/(you)//g" | tr -d "\r")
+            vm_user=$(echo "$admins" | head -n1 | tr -cd "[:alnum:]._-")
+        fi
 
-            shift
-            shift
-            ;;
-        *)
-            echo "Unknown argument $1"
-            print_help
-            exit
-            ;;
+        shift
+        shift
+        ;;
+    *)
+        echo "Unknown argument $1"
+        print_help
+        exit
+        ;;
     esac
 done
 
@@ -735,19 +746,19 @@ function menu() {
         prefix="($i)"
         line="$prefix ${funcs[i]}"
         if [ -n "${funcs[i + 1]}" ]; then
-            line="$line$(repl ' ' $(( 25 - (${#funcs[i]} + ${#prefix}) )))($((i + 1))) ${funcs[i + 1]}"
+            line="$line$(repl ' ' $((25 - (${#funcs[i]} + ${#prefix}))))($((i + 1))) ${funcs[i + 1]}"
         fi
         echo "$line"
     done
     read -r -p '> ' input
 
-    if ! [[ $input =~ $re ]] ; then
-       echo "Please enter a number."
-       return
+    if ! [[ $input =~ $re ]]; then
+        echo "Please enter a number."
+        return
     fi
 
     if [[ $input -ge "${#funcs[@]}" ]] || [[ $input -lt 0 ]]; then
-        echo "Please enter a number from 0 to $(( ${#funcs[@]} - 1 ))"
+        echo "Please enter a number from 0 to $((${#funcs[@]} - 1))"
         return
     fi
 

@@ -7,11 +7,11 @@ export log_base="./logs"
 
 # Shut up both commands
 function pushd {
-	command pushd "$@" > /dev/null || return
+    command pushd "$@" >/dev/null || return
 }
 
 function popd {
-	command popd > /dev/null || return
+    command popd >/dev/null || return
 }
 
 # Repeat a given character
@@ -21,7 +21,7 @@ function repl() {
 
 function get_users() {
     # The <65534 condition is to skip the nobody user
-    awk -F: '{if ($3 >= 1000 && $3 < 65534) print $1}' < /etc/passwd
+    awk -F: '{if ($3 >= 1000 && $3 < 65534) print $1}' </etc/passwd
 }
 
 function user_exists() {
@@ -34,10 +34,18 @@ function user_exists() {
 
 # Pattern to match, text, file to check
 function edit_or_append() {
+    local bf="$3-bak"
+    if ! [ -e "$bf" ]; then
+        echo "Backing up $3 to $bf"
+        cp "$3" "$bf"
+    else
+        echo "Backup found at $bf"
+    fi
+
     if grep -Eq "$1" "$3"; then
         sed -Ei "s\`$1\`$2\`g" "$3"
     else
-        echo "$2" >> "$3"
+        echo "$2" >>"$3"
     fi
 }
 
@@ -45,11 +53,12 @@ function prompt_y_n() {
     read -p "$1" response
 
     case "$response" in
-        [yY]*)
-            return 0 # true
-            ;;
-        *)
-            return 1 # false
+    [yY]*)
+        return 0 # true
+        ;;
+    *)
+        return 1 # false
+        ;;
     esac
 }
 
@@ -57,22 +66,28 @@ function prompt_y_n_quit() {
     read -p "$1" response
 
     case "$response" in
-        [yY]*)
-            return 0 # true
-            ;;
-        [qQ]*)
-            return 2 # secret third option
-            ;;
-        *)
-            return 1 # false
-            ;;
+    [yY]*)
+        return 0 # true
+        ;;
+    [qQ]*)
+        return 2 # secret third option
+        ;;
+    *)
+        return 1 # false
+        ;;
     esac
 }
 
 # $1 package name
 function is_installed() {
     # shellcheck disable=1090
-    . <({ derr=$({ dout=$(dpkg -s "$1"); } 2>&1; declare -p dout >&2); declare -p derr; } 2>&1)
+    . <({
+        derr=$(
+            { dout=$(dpkg -s "$1"); } 2>&1
+            declare -p dout >&2
+        )
+        declare -p derr
+    } 2>&1)
 
     if echo "$derr" | grep -qw "is not installed"; then
         return 1 # false
@@ -112,13 +127,16 @@ function check_perm() {
 # $3 the path
 # $4 the array of parameters
 function apply_params_list() {
-    local split_char="$1"; shift
-    local regex_template="$1"; shift
-    local config_file="$1"; shift
+    local split_char="$1"
+    shift
+    local regex_template="$1"
+    shift
+    local config_file="$1"
+    shift
     local params=("$@")
 
     for param_string in "${params[@]}"; do
-        IFS="$split_char" read -ra split <<< "$param_string"
+        IFS="$split_char" read -ra split <<<"$param_string"
 
         local param="${split[0]}"
         local value="${split[1]}"
@@ -129,4 +147,3 @@ function apply_params_list() {
         edit_or_append "$regex" "$param_string" "$config_file"
     done
 }
-
