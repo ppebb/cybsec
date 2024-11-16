@@ -182,6 +182,11 @@ login_params=(
 function expiry() {
     apply_params_list " " "^::param::\s*(yes|no|[0-9]*)" "/etc/login.defs" "${login_params[@]}"
 
+    users=$(get_users)
+    for user in $users; do
+        chage --mindays 7 --maxdays 14 --warndays 7 "$user"
+    done
+
     echo "Finished configuring login.defs"
 }
 
@@ -189,6 +194,7 @@ commonpwd_conf="/etc/pam.d/common-password"
 commonauth_conf="/etc/pam.d/common-auth"
 
 # TODO: Make cracklib and pwquality have less redundant code because they do basically the same thing
+# TODO: Consider additional settings in https://github.com/CAMS-CyberPatriot/Linux-Checklist-1
 
 # WARN: Do not use this on newer systems (Debian 11, Ubuntu 22+, Mint 21, etc.), Cracklib and Tally2 are deprecated
 # TODO: Apparently invididual users can have a minimum password age? Maybe figure out how to reset the time data of user passwords. I think reassigning every user a new password should do it...
