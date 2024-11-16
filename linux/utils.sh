@@ -35,11 +35,13 @@ function user_exists() {
 # Pattern to match, text, file to check
 function edit_or_append() {
     local bf="$3-bak"
-    if ! [ -e "$bf" ]; then
-        echo "Backing up $3 to $bf"
-        cp "$3" "$bf"
-    else
-        echo "Backup found at $bf"
+    if [ -e "$3" ]; then
+        if ! [ -e "$bf" ]; then
+            echo "Backing up $3 to $bf"
+            cp "$3" "$bf"
+        else
+            echo "Backup found at $bf"
+        fi
     fi
 
     if grep -Eq "$1" "$3"; then
@@ -143,7 +145,7 @@ function apply_params_list() {
         local regex=${regex_template//::param::/$param}
         regex=${regex//::value::/$value}
 
-        echo "Adding $param with value $value to $config_file"
+        echo "Adding $param with value $value to $config_file, using regex ${regex}"
         edit_or_append "$regex" "$param_string" "$config_file"
     done
 }

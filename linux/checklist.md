@@ -64,3 +64,4 @@ mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd
 [2020 writeup](https://sourque.com/ctf/hivestorm/hs20/) and [2021 writeup](https://sourque.com/ctf/hivestorm/hs21/) with lots of useful advice for BOTH linux and windows
 [sysctl explorer](https://sysctl-explorer.net/)  
 [How to disable null passwords](https://www.cyberciti.biz/tips/linux-or-unix-disable-null-passwords.html) in case I have to use fedora lol  
+[Other scripts (old!)](https://github.com/BiermanM/CyberPatriot-Scripts/tree/master)  

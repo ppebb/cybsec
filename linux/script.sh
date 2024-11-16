@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-#TODO: FIX AUTOUPDATE REGEX
-#TODO: FIX UNINSTALLING BAD SOFTWARE
-#TODO: FIX LOGIN.DEFS
-
 # Exit if something errors to avoid something going terribly wrong...
 set -e
 
@@ -112,7 +108,7 @@ function manage_users() {
         for group in "${admin_groups[@]}"; do
             # shellcheck disable=2031
             if echo "$gout" | grep -qw "$group" && ! [[ "$admins" == *"$user"* ]]; then
-                if prompt_y_n "User $user is part of group $group when they should not be. Remove them from the group? [y/N]"; then
+                if prompt_y_n "User $user is part of group $group when they should not be. Remove them from the group? [y/N] "; then
                     echo "Removing $user from $group"
                     gpasswd -d "$user" "$group"
                 fi
@@ -141,11 +137,11 @@ function manage_users() {
         fi
     done
 
-    echo
-    printf "Check for weird admins:\n %s \n" "$(mawk -F: '$1 == "sudo"' /etc/group) \n"
-    printf "Check for weird users:\n %s \n" "$(mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd) \n"
-    printf "Check for empty passwords:\n %s \n" "$(mawk -F: '$2 == ""' /etc/passwd) \n"
-    printf "Check for empty passwords:\n %s \n" "$(mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd) \n"
+    printf "\n"
+    printf "Check for weird admins:\n %s \n" "$(mawk -F: '$1 == "sudo"' /etc/group)"
+    printf "Check for weird users:\n %s \n" "$(mawk -F: '$3 > 999 && $3 < 65534 {print $1}' /etc/passwd)"
+    printf "Check for empty passwords:\n %s \n" "$(mawk -F: '$2 == ""' /etc/passwd)"
+    printf "Check for empty passwords:\n %s \n" "$(mawk -F: '$3 == 0 && $1 != "root"' /etc/passwd)"
 
     echo "Done managing users"
 }
@@ -162,7 +158,9 @@ function change_passwords() {
     done
 
     for user in $admins; do
-        if ! [[ "$vm_user" == "$user" ]]; then # WARN: This should probably work. But make sure you know this password just in case
+        if ! user_exists "$user"; then
+            echo "Attempted to change password for admin '$user', but they do not exist"
+        elif ! [[ "$vm_user" == "$user" ]]; then # WARN: This should probably work. But make sure you know this password just in case
             echo "Changing password for admin $user"
             echo "$user:rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md" | chpasswd
         fi
@@ -172,17 +170,17 @@ function change_passwords() {
 }
 
 login_params=(
-    "FAILLOG_ENAB=YES"
-    "LOG_UNKFAIL_ENAB=YES"
-    "SYSLOG_SU_ENAB=YES"
-    "SYSLOG_SG_ENAB=YES"
-    "PASS_MAX_DAYS=14"
-    "PASS_MIN_DAYS=7"
-    "PASS_WARN_AGE=7"
+    "FAILLOG_ENAB yes"
+    "LOG_UNKFAIL_ENAB yes"
+    "SYSLOG_SU_ENAB yes"
+    "SYSLOG_SG_ENAB yes"
+    "PASS_MAX_DAYS 14"
+    "PASS_MIN_DAYS 7"
+    "PASS_WARN_AGE 7"
 )
 
 function expiry() {
-    apply_params_list "=" "^::param::\s*=\s*YES|NO|[0-9]*" "/etc/login.defs" "${login_params[@]}"
+    apply_params_list " " "^::param::\s*(yes|no|[0-9]*)" "/etc/login.defs" "${login_params[@]}"
 
     echo "Finished configuring login.defs"
 }
@@ -190,9 +188,9 @@ function expiry() {
 commonpwd_conf="/etc/pam.d/common-password"
 commonauth_conf="/etc/pam.d/common-auth"
 
-# WARN: This fucking breaks on ubuntu 22 AND debian 11 for some reason. I don't know if it's because of pwquality conflicting with cracklib or because I fucked up a setting. Kill me.
-# TODO: Setup pwquality. Figure out what a gdm "correctly configured authentication stack"
-# TODO: What the fuck is a GECOS field. GECOS pw strength checks
+# TODO: Make cracklib and pwquality have less redundant code because they do basically the same thing
+
+# WARN: Do not use this on newer systems (Debian 11, Ubuntu 22+, Mint 21, etc.), Cracklib and Tally2 are deprecated
 # TODO: Apparently invididual users can have a minimum password age? Maybe figure out how to reset the time data of user passwords. I think reassigning every user a new password should do it...
 function setup_cracklib() {
     if ! prompt_install "libpam-cracklib"; then
@@ -209,7 +207,7 @@ function setup_cracklib() {
         echo "$commonpwd_conf is missing"
     else
         sed -i "s/\(pam_unix\.so.*\)$/\1 remember=5 minlen=8/" "$commonpwd_conf"
-        sed -i "s/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1/" "$commonpwd_conf"
+        sed -i "s/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 gecoscheck=1/" "$commonpwd_conf"
         sed -i "s/nullok_secure//" "$commonpwd_conf"
         sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
     fi
@@ -224,6 +222,38 @@ function setup_cracklib() {
     fi
 
     echo "Finished confiuring libpam-cracklib"
+}
+
+function setup_pwquality() {
+    if ! prompt_install "libpam-pwquality"; then
+        return
+    fi
+
+    echo "Configuring libpam-pwquality"
+
+    echo "Backing up config in case something goes wrong"
+    cp "$commonpwd_conf" "$commonpwd_conf.bak"
+    cp "$commonauth_conf" "$commonauth_conf.bak"
+
+    if [ ! -f "$commonpwd_conf" ]; then
+        echo "$commonpwd_conf is missing"
+    else
+        sed -i "s/\(pam_unix\.so.*\)$/\1 remember=5 minlen=8/" "$commonpwd_conf"
+        sed -i "s/\(pam_pwquality\.so.*\)$/\1 minlen=8 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 gecoscheck=1/" "$commonpwd_conf"
+        sed -i "s/nullok_secure//" "$commonpwd_conf"
+        sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
+    fi
+
+    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_faillock.so deny=5 onerr=fail unlock_time=1800" <"$commonauth_conf"; then
+        echo "auth required pam_faillock.so deny=5 onerr=fail unlock_time=1800" >>"$commonauth_conf"
+    fi
+
+    # Remove null passwords
+    if [[ -f "$commonauth_conf" ]]; then
+        sed -i "s/nullok//" "$commonauth_conf"
+    fi
+
+    echo "Finished confiuring libpam-pwquality"
 }
 
 function lock_root() {
@@ -335,7 +365,7 @@ function kernel_parameters() {
 bad_software_list=("aircrack-ng" "deluge" "gameconqueror" "hashcat" "hydra" "john" "john-data" "nmap" "openvpn" "qbittorrent" "telnet" "wireguard" "zenmap" "ophcrack" "nc" "netcat" "netcat-openbsd" "nikto" "wireshark" "tcpdump" "netcat-traditional" "minetest")
 
 function bad_software() {
-    apt purge "${bad_software_list[*]}"
+    apt purge "${bad_software_list[@]}"
 
     echo "Removed disallowed software"
 }
@@ -550,17 +580,17 @@ gdm3_params=(
 function display_manager() {
     if [ -f "$lightdm_conf" ]; then
         echo "Fixing $lightdm_conf settings"
-        apply_params_list "=" "^::param::\s*=\s*true|false" "$lightdm_conf" "${lightdm_params[@]}"
+        apply_params_list "=" "^::param::\s*=\s*(true|false)" "$lightdm_conf" "${lightdm_params[@]}"
     fi
 
     if [ -f "$gdm3_conf" ]; then
         echo "Fixing $gdm3_conf settings"
-        apply_params_list "=" "^::param::\s*=\s*true|false" "$gdm3_conf" "${gdm3_params[@]}"
+        apply_params_list "=" "^::param::\s*=\s*(true|false)" "$gdm3_conf" "${gdm3_params[@]}"
     fi
 
     # if [ -f "$gdm3_custom_conf" ]; then
     #     echo "Fixing $gdm3_custom_conf settings"
-    #     apply_params_list "=" "^::param::\s*=\s*true|false" "$gdm3_custom_conf" "${gdm3_custom_params[@]}"
+    #     apply_params_list "=" "^::param::\s*=\s*(true|false)" "$gdm3_custom_conf" "${gdm3_custom_params[@]}"
     # fi
 }
 
@@ -691,7 +721,14 @@ while [[ $# -gt 0 ]]; do
         # Update: It works. I'm not killing myself
         if [[ $text =~ $readme_exp ]]; then
             admins="${BASH_REMATCH[1]}"
-            allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
+            allowed_users_orig="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
+            allowed_users=""
+
+            # Trim characters that were breaking certain things
+            for allowed_user in $allowed_users_orig; do
+                allowed_users+=" ${allowed_user//[$'\t\r\n ']/}"
+            done
+
             admins=${admins#*$'\n'}
             # There should no longer be random newlines here
             passwords=$(echo "$admins" | grep "password" | sed "s/password: //g" | sed "s/^[ \t]*//")
@@ -718,6 +755,7 @@ funcs=(
     change_passwords
     expiry
     setup_cracklib
+    setup_pwquality
     lock_root
     list_disallowed_files
     kernel_parameters
