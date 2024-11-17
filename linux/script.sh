@@ -43,12 +43,18 @@ function auto_update() {
 
     cp -f "$apt_periodic_conf" "$apt_autoupgrade_conf"
 
+    if [ -e "/etc/issue" ] && grep -qw "Mint" </etc/issue; then
+        echo "Enabling automatic updates for Linux Mint"
+        mintupdate-automation upgrade enable
+    fi
+
     echo "Done configuring automatic updates!"
 }
 
 function firewall() {
     apt install ufw -y
     ufw default deny
+    ufw logging high
     ufw enable
 
     echo "Installed and configured ufw"
