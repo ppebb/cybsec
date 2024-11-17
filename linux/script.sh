@@ -727,6 +727,26 @@ function sshd() {
     systemctl restart sshd.service
 }
 
+apache2_conf="/etc/apache2/apache2.conf"
+apache2_settings=(
+    # NOTE: Signature and Tokens may need to be set in /etc/apache2/conf-available/security.conf
+    "ServerSignature Off"
+    "ServerTokens Prod"
+    "Timeout 45"
+    "KeepAlive Off"
+)
+
+function apache2() {
+    if ! prompt_install "apache2"; then
+        return
+    fi
+
+    apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$apache2_conf" "${apache2_settings[@]}"
+
+    systemctl enable apache2.service
+    systemctl restart apache2.service
+}
+
 function print_help() {
     echo \
         "
@@ -738,7 +758,6 @@ Usage: script.sh [OPTIONS]
 "
 }
 # TODO: Should add smb, ssh, vsftp, apache, php, mysql, postgresql and more secure configurations eventually
-# NOTE: Apache gives points for setting tokens to prod and disabling signatures or something like that.
 
 # SCRIPT BEGINS HERE!!!!!!
 
@@ -834,6 +853,7 @@ funcs=(
     diff_default_files
     fail2ban
     sshd
+    apache2
 )
 
 re='^[0-9]+$'
