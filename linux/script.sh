@@ -163,6 +163,8 @@ function change_passwords() {
 
         echo "Changing password for $user"
         echo "$user:rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md" | chpasswd
+        echo "Clearing Finger for $user"
+        chfn -f "" -h "" -o "" -r "" -w "" "$user"
     done
 
     for user in $admins; do
@@ -171,6 +173,8 @@ function change_passwords() {
         elif ! [[ "$vm_user" == "$user" ]]; then # WARN: This should probably work. But make sure you know this password just in case
             echo "Changing password for admin $user"
             echo "$user:rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md" | chpasswd
+            echo "Clearing Finger for admin $user"
+            chfn -f "" -h "" -o "" -r "" -w "" "$user"
         fi
     done
 
@@ -408,7 +412,31 @@ function kernel_parameters() {
     echo "Finished checking kernel parameters in $kp_conf"
 }
 
-bad_software_list=("aircrack-ng" "deluge" "gameconqueror" "hashcat" "hydra" "john" "john-data" "nmap" "openvpn" "qbittorrent" "telnet" "wireguard" "zenmap" "ophcrack" "nc" "netcat" "netcat-openbsd" "nikto" "wireshark" "tcpdump" "netcat-traditional" "minetest" "fcrackzip")
+bad_software_list=("aircrack-ng"
+    "deluge"
+    "gameconqueror"
+    "hashcat"
+    "hydra"
+    "john"
+    "john-data"
+    "nmap"
+    "openvpn"
+    "qbittorrent"
+    "telnet"
+    "wireguard"
+    "zenmap"
+    "ophcrack"
+    "nc"
+    "netcat"
+    "netcat-openbsd"
+    "nikto"
+    "wireshark"
+    "tcpdump"
+    "netcat-traditional"
+    "minetest"
+    "fcrackzip"
+    "ettercap"
+)
 
 function bad_software() {
     apt purge "${bad_software_list[@]}"
@@ -416,7 +444,20 @@ function bad_software() {
     echo "Removed disallowed software"
 }
 
-potentially_unwanted_software=("openssh-server" "nginx" "apache" "apache2" "bind9" "caddy" "postfix" "sendmail" "vsftpd" "smbd" "lighttpd" "nfs") # TODO: add more because I keep forgetting
+# TODO: add more because I keep forgetting
+potentially_unwanted_software=("openssh-server"
+    "nginx"
+    "apache"
+    "apache2"
+    "bind9"
+    "caddy"
+    "postfix"
+    "sendmail"
+    "vsftpd"
+    "smbd"
+    "lighttpd"
+    "nfs"
+)
 
 function unwanted_programs() {
     for program in "${potentially_unwanted_software[@]}"; do
