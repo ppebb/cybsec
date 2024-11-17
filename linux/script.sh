@@ -704,6 +704,29 @@ function fail2ban() {
     echo "Enabled fail2ban"
 }
 
+sshd_conf="/etc/ssh/sshd_config"
+sshd_settings=(
+    "LoginGraceTime 60"
+    "PermitRootLogin no"
+    "Protocol 2"
+    "PermitEmptyPasswords no"
+    "PasswordAuthentication yes"
+    "X11Forwarding no"
+    "UsePAM yes"
+    "UsePrivilegeSeparation yes"
+)
+
+function sshd() {
+    if ! prompt_install "openssh-server"; then
+        return
+    fi
+
+    apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$sshd_conf" "${sshd_settings[@]}"
+
+    systemctl enable sshd.service
+    systemctl restart sshd.service
+}
+
 function print_help() {
     echo \
         "
@@ -810,6 +833,7 @@ funcs=(
     auditd
     diff_default_files
     fail2ban
+    sshd
 )
 
 re='^[0-9]+$'
