@@ -460,7 +460,8 @@ function kernel_parameters() {
     echo "* hard core 0" >/etc/security/limits.d/custom.conf
 }
 
-bad_software_list=("aircrack-ng"
+bad_software_list=(
+    "aircrack-ng"
     "deluge"
     "gameconqueror"
     "hashcat"
@@ -489,6 +490,11 @@ bad_software_list=("aircrack-ng"
     "kismet"
     "freeciv"
     "minetest-server"
+    "medusa"
+    "truecrack"
+    "cryptcat"
+    "tightvncserver"
+    "x11vnc"
 )
 
 function bad_software() {
@@ -498,7 +504,8 @@ function bad_software() {
 }
 
 # TODO: add more because I keep forgetting
-potentially_unwanted_software=("openssh-server"
+potentially_unwanted_software=(
+    "openssh-server"
     "nginx"
     "apache"
     "apache2"
@@ -510,6 +517,11 @@ potentially_unwanted_software=("openssh-server"
     "smbd"
     "lighttpd"
     "nfs"
+    "samba"
+    "mysql"
+    "postgresql"
+    "snmp"
+    "dovecot"
 )
 
 function unwanted_programs() {
@@ -736,6 +748,21 @@ function auditd() {
     auditctl -e 1
 
     echo "Enabled auditd"
+}
+
+function lynis() {
+    if ! prompt_install "git"; then
+        return
+    fi
+
+    cd /usr/local
+    git clone https://github.com/CISOfy/lynis
+    chown -R 0:0 /usr/local/lynis
+
+    cd /usr/local/lynis
+    lynis audit system
+
+    echo "lynis log stored in /var/log/lynis-report.dat"
 }
 
 # $1 the original file
@@ -997,6 +1024,7 @@ funcs=(
     clamav
     display_manager
     auditd
+    lynis
     diff_default_files
     fail2ban
     sshd
