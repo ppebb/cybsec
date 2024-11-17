@@ -185,22 +185,38 @@ function change_passwords() {
 login_params=(
     "FAILLOG_ENAB yes"
     "LOG_UNKFAIL_ENAB yes"
+    "LOG_OK_LOGINS yes"
     "SYSLOG_SU_ENAB yes"
     "SYSLOG_SG_ENAB yes"
     "PASS_MAX_DAYS 14"
     "PASS_MIN_DAYS 7"
     "PASS_WARN_AGE 7"
+
+    # Needs to match pam configuration
+    "ENCRYPT-METHOD SHA512"
+
+    # Overridden by pam. Set just in case!
+    "LOGIN_RETRIES 5"
+    "LOGIN_TIMEOUT 60"
+    "CHFN_RESTRICT RWH"
+)
+
+useradd_params=(
+    "EXPIRE=30"
+    "INACTIVE=30"
 )
 
 function expiry() {
-    apply_params_list " " "^::param::\s*(yes|no|[0-9]*)" "/etc/login.defs" "${login_params[@]}"
+    apply_params_list " " "^::param::\s*[a-zA-Z0-9]" "/etc/login.defs" "${login_params[@]}"
 
     users=$(get_users)
     for user in $users; do
         chage --mindays 7 --maxdays 14 --warndays 7 "$user"
     done
 
-    echo "Finished configuring login.defs"
+    apply_params_list " " "^::param::\s*=\s*[0-9]*)" "/etc/default/useradd" "${useradd_params[@]}"
+
+    echo "Finished configuring login.defs and /etc/default/useradd"
 }
 
 commonpwd_conf="/etc/pam.d/common-password"
@@ -355,6 +371,10 @@ kparams=(
     "net.ipv6.conf.all.accept_redirects=0"
     "net.ipv4.conf.default.accept_redirects=0"
     "net.ipv6.conf.default.accept_redirects=0"
+    "net.ipv4.conf.all.secure_redirects=0"
+    "net.ipv6.conf.all.secure_redirects=0"
+    "net.ipv4.conf.default.secure_redirects=0"
+    "net.ipv6.conf.default.secure_redirects=0"
 
     # Ignore Directed pings
     "net.ipv4.icmp_echo_ignore_all=1"
@@ -379,6 +399,31 @@ kparams=(
     "net.ipv4.conf.all.mc_forwarding=0"
     "net.ipv4.conf.all.proxy_arp=0"
     "net.ipv4.tcp_timestamps=0"
+
+    "fs.file-max=65535"
+    "kernel.pid_max=65536"
+    "net.core.netdev_max_backlog=5000"
+    "net.core.rmem_max=8388608"
+    "net.core.wmem_max=8388608"
+    "net.ipv4.conf.all.rp_filter=1"
+    "net.ipv4.conf.default.rp_filter=1"
+    "net.ipv4.ip_local_port_range=200065000"
+    "net.ipv4.tcp_rmem=102408738012582912"
+    "net.ipv4.tcp_window_scaling=1"
+    "net.ipv4.tcp_wmem=102408738012582912"
+
+    # NOTE: Disabling ipv6 might be helpful
+    # "net.ipv6.conf.all.disable_ipv6=1"
+    # "net.ipv6.conf.default.disable_ipv6=1"
+    # "net.ipv6.conf.lo.disable_ipv6=1"
+
+    "net.ipv6.conf.default.accept_ra_defrtr=0"
+    "net.ipv6.conf.default.accept_ra_pinfo=0"
+    "net.ipv6.conf.default.accept_ra_rtr_pref=0"
+    "net.ipv6.conf.default.autoconf=0"
+    "net.ipv6.conf.default.dad_transmits=0"
+    "net.ipv6.conf.default.max_addresses=1"
+    "net.ipv6.conf.default.router_solicitations=0"
 )
 
 kp_conf="/etc/sysctl.conf"
@@ -410,6 +455,9 @@ function kernel_parameters() {
     done
 
     echo "Finished checking kernel parameters in $kp_conf"
+
+    echo "Restricting coredumps"
+    echo "* hard core 0" >/etc/security/limits.d/custom.conf
 }
 
 bad_software_list=("aircrack-ng"
@@ -436,6 +484,11 @@ bad_software_list=("aircrack-ng"
     "minetest"
     "fcrackzip"
     "ettercap"
+    "vuze"
+    "frostwire"
+    "kismet"
+    "freeciv"
+    "minetest-server"
 )
 
 function bad_software() {
@@ -507,7 +560,7 @@ function list_units() {
         fi
     done
 
-    if prompt_y_n "Check enabled units for anything else unwanted [y/N]"; then
+    if prompt_y_n "Check enabled units for anything else unwanted [y/N] "; then
         systemctl list-units --type=service --state=active
     fi
 }
@@ -574,6 +627,10 @@ function check_rc_local() {
     if [[ -f /etc/rc.local ]]; then
         echo "/etc/rc.local exists, check for anything unwanted"
         cat /etc/rc.local
+
+        if prompt_y_n "Clear rc.local? [y/N]"; then
+            echo "exit 0" >/etc/rc.local
+        fi
     else
         echo "/etc/rc.local does not exist"
     fi
@@ -819,6 +876,25 @@ function postgres() {
     false
 }
 
+# NOTE: I don't really know what this is doing or why it's here.
+grub_pass_base="rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md"
+# username for grub authentication
+grub_user="2oe"
+# creates encrypted grub password (same as $grub_pass_base)
+grub_pass=$(printf '%s\n%s' "$grub_pass_base" "$grub_pass_base" | grub-mkpasswd-pbkdf2 | tr -d '\n' | sed -e 's/Enter password: Reenter password: PBKDF2 hash of your password is //g')
+function grub() {
+    chown root:root /boot/grub/grub.cfg
+    chmod 0400 /boot/grub/grub.cfg
+
+    echo "#!/bin/sh
+exec tail -n +3 \$0
+
+set superusers=\"$grub_user\"
+password_pbkdf2 $grub_user $grub_pass" >/etc/grub.d/40_custom
+
+    update-grub
+}
+
 function print_help() {
     echo \
         "
@@ -834,8 +910,8 @@ Usage: script.sh [OPTIONS]
 
 user=$(whoami)
 
-if [ "$user" != 'root' ]; then
-    echo 'Please run this as root!'
+if [ "$user" != "root" ]; then
+    echo "Please run this as root!"
     echo "Current user: $user"
     exit 1
 fi
