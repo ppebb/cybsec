@@ -199,6 +199,9 @@ login_params=(
     "LOGIN_RETRIES 5"
     "LOGIN_TIMEOUT 60"
     "CHFN_RESTRICT RWH"
+
+    # Set restrictive umask
+    "UMASK 027"
 )
 
 useradd_params=(
@@ -588,9 +591,41 @@ files_needing_exec=(
 
 function verify_perms() {
     # These should be covered by the hashes but check them anyway just in case
-    check_perm /etc/passwd 644 false
-    check_perm /etc/group 644 false
-    check_perm /etc/shadow 0 false
+    # check_perm /etc/passwd 644 false
+    # check_perm /etc/group 644 false
+    # check_perm /etc/shadow 0 false
+
+    chmod -R g-wx,o-rwx /var/log/*
+
+    chown root:root /etc/ssh/sshd_config
+    chmod og-rwx /etc/ssh/sshd_config
+
+    chown root:root /etc/passwd
+    chmod 644 /etc/passwd
+
+    chown root:shadow /etc/shadow
+    chmod o-rwx,g-wx /etc/shadow
+
+    chown root:root /etc/group
+    chmod 644 /etc/group
+
+    chown root:shadow /etc/gshadow
+    chmod o-rwx,g-rw /etc/gshadow
+
+    chown root:root /etc/passwd-
+    chmod 600 /etc/passwd-
+
+    chown root:root /etc/shadow-
+    chmod 600 /etc/shadow-
+
+    chown root:root /etc/group-
+    chmod 600 /etc/group-
+
+    chown root:root /etc/gshadow-
+    chmod 600 /etc/gshadow-
+
+    chmod 700 /root
+    chmod 600 /etc/securetty
 
     # Fix home directory permissions
     echo "Checking home directory permissions"
@@ -633,6 +668,9 @@ function verify_perms() {
 
     find "$perms_search_root" -perm -o=r >"$world_readable_log"
     echo "Found $(wc -l <"$world_readable_log") world-readable files in $perms_search_root!"
+
+    echo "Setting sticky bit on all world-writeable directories"
+    df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type d -perm -0002 2>/dev/null | xargs chmod a+t
 }
 
 function check_rc_local() {
@@ -859,6 +897,8 @@ apache2_settings=(
     "ServerTokens Prod"
     "Timeout 45"
     "KeepAlive Off"
+    "FileETag None"
+    "TraceEnable off"
 )
 
 function apache2() {
@@ -911,7 +951,7 @@ grub_user="2oe"
 grub_pass=$(printf '%s\n%s' "$grub_pass_base" "$grub_pass_base" | grub-mkpasswd-pbkdf2 | tr -d '\n' | sed -e 's/Enter password: Reenter password: PBKDF2 hash of your password is //g')
 function grub() {
     chown root:root /boot/grub/grub.cfg
-    chmod 0400 /boot/grub/grub.cfg
+    chmod 400 /boot/grub/grub.cfg
 
     echo "#!/bin/sh
 exec tail -n +3 \$0
