@@ -53,7 +53,9 @@ function auto_update() {
 
 function firewall() {
     apt install ufw -y
-    ufw default deny
+    ufw default deny incoming
+    ufw default allow outgoing
+    ufw logging on
     ufw logging high
     ufw enable
 
@@ -173,6 +175,7 @@ function change_passwords() {
     done
 
     echo "Done changing passwords"
+    echo "If the password hashing algorithm is updated, re-run this!"
 }
 
 login_params=(
@@ -200,10 +203,12 @@ commonpwd_conf="/etc/pam.d/common-password"
 commonauth_conf="/etc/pam.d/common-auth"
 
 # TODO: Make cracklib and pwquality have less redundant code because they do basically the same thing
-# TODO: Consider additional settings in https://github.com/CAMS-CyberPatriot/Linux-Checklist-1
+
+pwstrength_opts="minlen=16 difok=4 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 gecoscheck=1 dictcheck=1 retry=3"
+pam_unix_opts="obscure use_authtok try_first_pass sha512crypt remember=12"
+pam_count_opts="deny=5 audit onerr=fail unlock_time=1800 even_deny_root"
 
 # WARN: Do not use this on newer systems (Debian 11, Ubuntu 22+, Mint 21, etc.), Cracklib and Tally2 are deprecated
-# TODO: Apparently invididual users can have a minimum password age? Maybe figure out how to reset the time data of user passwords. I think reassigning every user a new password should do it...
 function setup_cracklib() {
     if ! prompt_install "libpam-cracklib"; then
         return
@@ -218,14 +223,15 @@ function setup_cracklib() {
     if [ ! -f "$commonpwd_conf" ]; then
         echo "$commonpwd_conf is missing"
     else
-        sed -i "s/\(pam_unix\.so.*\)$/\1 remember=5 minlen=8/" "$commonpwd_conf"
-        sed -i "s/\(pam_cracklib\.so.*\)$/\1 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 gecoscheck=1/" "$commonpwd_conf"
+        sed -i "s/\(pam_cracklib\.so.*\)$/\1 $pwstrength_opts/" "$commonpwd_conf"
+        sed -i "s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/" "$commonpwd_conf"
         sed -i "s/nullok_secure//" "$commonpwd_conf"
         sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
     fi
 
-    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" <"$commonauth_conf"; then
-        echo "auth required pam_tally2.so deny=5 onerr=fail unlock_time=1800" >>"$commonauth_conf"
+    local common_auth_string="auth required pam_tally2.so $pam_count_opts"
+    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "$common_auth_string" <"$commonauth_conf"; then
+        echo "$common_auth_string" >>"$commonauth_conf"
     fi
 
     # Remove null passwords
@@ -233,6 +239,8 @@ function setup_cracklib() {
         sed -i "s/nullok//" "$commonauth_conf"
     fi
 
+    echo "Updating passwords to fit new pam values!"
+    change_passwords
     echo "Finished confiuring libpam-cracklib"
 }
 
@@ -250,14 +258,15 @@ function setup_pwquality() {
     if [ ! -f "$commonpwd_conf" ]; then
         echo "$commonpwd_conf is missing"
     else
-        sed -i "s/\(pam_unix\.so.*\)$/\1 remember=5 minlen=8/" "$commonpwd_conf"
-        sed -i "s/\(pam_pwquality\.so.*\)$/\1 minlen=8 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 gecoscheck=1/" "$commonpwd_conf"
+        sed -i "s/\(pam_pwquality\.so.*\)$/\1 $pwstrength_opts/" "$commonpwd_conf"
+        sed -i "s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/" "$commonpwd_conf"
         sed -i "s/nullok_secure//" "$commonpwd_conf"
         sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
     fi
 
-    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "auth required pam_faillock.so deny=5 onerr=fail unlock_time=1800" <"$commonauth_conf"; then
-        echo "auth required pam_faillock.so deny=5 onerr=fail unlock_time=1800" >>"$commonauth_conf"
+    local common_auth_string="auth required pam_faillock.so $pam_count_opts"
+    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "$pam_count_opts" <"$commonauth_conf"; then
+        echo "$common_auth_string" >>"$commonauth_conf"
     fi
 
     # Remove null passwords
@@ -265,6 +274,8 @@ function setup_pwquality() {
         sed -i "s/nullok//" "$commonauth_conf"
     fi
 
+    echo "Updating passwords to fit new pam values!"
+    change_passwords
     echo "Finished confiuring libpam-pwquality"
 }
 
@@ -397,7 +408,7 @@ function kernel_parameters() {
     echo "Finished checking kernel parameters in $kp_conf"
 }
 
-bad_software_list=("aircrack-ng" "deluge" "gameconqueror" "hashcat" "hydra" "john" "john-data" "nmap" "openvpn" "qbittorrent" "telnet" "wireguard" "zenmap" "ophcrack" "nc" "netcat" "netcat-openbsd" "nikto" "wireshark" "tcpdump" "netcat-traditional" "minetest")
+bad_software_list=("aircrack-ng" "deluge" "gameconqueror" "hashcat" "hydra" "john" "john-data" "nmap" "openvpn" "qbittorrent" "telnet" "wireguard" "zenmap" "ophcrack" "nc" "netcat" "netcat-openbsd" "nikto" "wireshark" "tcpdump" "netcat-traditional" "minetest" "fcrackzip")
 
 function bad_software() {
     apt purge "${bad_software_list[@]}"
@@ -405,7 +416,7 @@ function bad_software() {
     echo "Removed disallowed software"
 }
 
-potentially_unwanted_software=("openssh-server" "nginx" "apache" "apache2" "bind9" "caddy" "postfix" "sendmail" "vsftpd" "smbd" "lighttpd") # TODO: add more because I keep forgetting
+potentially_unwanted_software=("openssh-server" "nginx" "apache" "apache2" "bind9" "caddy" "postfix" "sendmail" "vsftpd" "smbd" "lighttpd" "nfs") # TODO: add more because I keep forgetting
 
 function unwanted_programs() {
     for program in "${potentially_unwanted_software[@]}"; do
@@ -607,12 +618,6 @@ gdm3_params=(
     "disable-restart-buttons=true"
 )
 
-# Gdm3 custom is off because I shouldn't be turning off automatic login. What was I thinking
-# gdm3_custom_conf="/etc/gdm3/custom.conf"
-# gdm3_custom_params=(
-#     "AutomaticLoginEnable=false"
-# )
-
 function display_manager() {
     if [ -f "$lightdm_conf" ]; then
         echo "Fixing $lightdm_conf settings"
@@ -623,11 +628,6 @@ function display_manager() {
         echo "Fixing $gdm3_conf settings"
         apply_params_list "=" "^::param::\s*=\s*(true|false)" "$gdm3_conf" "${gdm3_params[@]}"
     fi
-
-    # if [ -f "$gdm3_custom_conf" ]; then
-    #     echo "Fixing $gdm3_custom_conf settings"
-    #     apply_params_list "=" "^::param::\s*=\s*(true|false)" "$gdm3_custom_conf" "${gdm3_custom_params[@]}"
-    # fi
 }
 
 function auditd() {
@@ -747,6 +747,37 @@ function apache2() {
     systemctl restart apache2.service
 }
 
+vsftpd_conf="/etc/vsftpd.conf"
+vsftpd_settings=(
+    "anonymous_enable=NO"
+    "local_enable=YES"
+    "write_enable=YES"
+    "chroot_local_user=YES"
+)
+
+function vsftpd() {
+    if ! prompt_install "vsftpd"; then
+        return
+    fi
+
+    apply_params_list "=" "^::param::\s*=\s*(NO|YES)*" "$vsftpd_conf" "${vsftpd_settings[@]}"
+
+    systemctl enable vsftpd.service
+    systemctl restart vsftpd.service
+}
+
+function mysql() {
+    false
+}
+
+function nginx() {
+    false
+}
+
+function postgres() {
+    false
+}
+
 function print_help() {
     echo \
         "
@@ -757,7 +788,6 @@ Usage: script.sh [OPTIONS]
  --readme                      Link to grab readme from; will be parsed for authorized users and administrators
 "
 }
-# TODO: Should add smb, ssh, vsftp, apache, php, mysql, postgresql and more secure configurations eventually
 
 # SCRIPT BEGINS HERE!!!!!!
 
@@ -854,6 +884,10 @@ funcs=(
     fail2ban
     sshd
     apache2
+    vsftpd
+    mysql
+    nginx
+    postgres
 )
 
 re='^[0-9]+$'
