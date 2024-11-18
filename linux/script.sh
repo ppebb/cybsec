@@ -233,75 +233,60 @@ pwstrength_opts="minlen=16 difok=4 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 g
 pam_unix_opts="obscure use_authtok try_first_pass sha512crypt remember=12"
 pam_count_opts="deny=5 audit onerr=fail unlock_time=1800 even_deny_root"
 
-# WARN: Do not use this on newer systems (Debian 11, Ubuntu 22+, Mint 21, etc.), Cracklib and Tally2 are deprecated
-function setup_cracklib() {
-    if ! prompt_install "libpam-cracklib"; then
+libname=""
+function setup_pam() {
+    read -p "Configure cracklib or pwquality? [cracklib/pwquality] " response
+
+    case "$response" in
+    cracklib)
+        echo "Configuring libpam-cracklib"
+
+        if ! prompt_install "libpam-cracklib"; then
+            return
+        fi
+
+        lib_sed="s/\(pam_cracklib\.so.*\)$/\1 $pwstrength_opts/"
+        unix_sed="s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/"
+
+        common_auth_string="auth required pam_tally2.so $pam_count_opts"
+
+        libname="cracklib"
+        ;;
+    pwquality)
+        echo "Configuring libpam-pwquality"
+
+        if ! prompt_install "libpam-pwquality"; then
+            return
+        fi
+
+        lib_sed="s/\(pam_pwquality\.so.*\)$/\1 $pwstrength_opts/"
+        unix_sed="s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/"
+
+        libname="pwquality"
+        ;;
+    *)
+        echo "Unknown option selected, select either cracklib or pwquality"
         return
-    fi
+        ;;
+    esac
 
-    echo "Configuring libpam-cracklib"
+    sed -i "$lib_sed" "$commonpwd_conf"
+    sed -i "$unix_sed" "$commonpwd_conf"
+    sed -i "s/nullok_secure//" "$commonpwd_conf"
+    sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
+    # Remvoe null passwords
+    sed -i "s/nullok//" "$commonauth_conf"
 
-    echo "Backing up config in case something goes wrong"
-    cp "$commonpwd_conf" "$commonpwd_conf.bak"
-    cp "$commonauth_conf" "$commonauth_conf.bak"
-
-    if [ ! -f "$commonpwd_conf" ]; then
-        echo "$commonpwd_conf is missing"
-    else
-        sed -i "s/\(pam_cracklib\.so.*\)$/\1 $pwstrength_opts/" "$commonpwd_conf"
-        sed -i "s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/" "$commonpwd_conf"
-        sed -i "s/nullok_secure//" "$commonpwd_conf"
-        sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
-    fi
-
-    local common_auth_string="auth required pam_tally2.so $pam_count_opts"
     if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "$common_auth_string" <"$commonauth_conf"; then
         echo "$common_auth_string" >>"$commonauth_conf"
     fi
 
-    # Remove null passwords
-    if [[ -f "$commonauth_conf" ]]; then
-        sed -i "s/nullok//" "$commonauth_conf"
-    fi
-
     echo "Updating passwords to fit new pam values!"
     change_passwords
-    echo "Finished confiuring libpam-cracklib"
-}
+    echo "Finished configuring libpam-$libname"
 
-function setup_pwquality() {
-    if ! prompt_install "libpam-pwquality"; then
-        return
-    fi
-
-    echo "Configuring libpam-pwquality"
-
-    echo "Backing up config in case something goes wrong"
-    cp "$commonpwd_conf" "$commonpwd_conf.bak"
-    cp "$commonauth_conf" "$commonauth_conf.bak"
-
-    if [ ! -f "$commonpwd_conf" ]; then
-        echo "$commonpwd_conf is missing"
-    else
-        sed -i "s/\(pam_pwquality\.so.*\)$/\1 $pwstrength_opts/" "$commonpwd_conf"
-        sed -i "s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/" "$commonpwd_conf"
-        sed -i "s/nullok_secure//" "$commonpwd_conf"
-        sed -i "s/yescrypt/sha512crypt/g" "$commonpwd_conf"
-    fi
-
-    local common_auth_string="auth required pam_faillock.so $pam_count_opts"
-    if ! [[ -f "$commonauth_conf" ]] || ! grep -qw "$pam_count_opts" <"$commonauth_conf"; then
-        echo "$common_auth_string" >>"$commonauth_conf"
-    fi
-
-    # Remove null passwords
-    if [[ -f "$commonauth_conf" ]]; then
-        sed -i "s/nullok//" "$commonauth_conf"
-    fi
-
-    echo "Updating passwords to fit new pam values!"
-    change_passwords
-    echo "Finished confiuring libpam-pwquality"
+    echo "Disabling rhosts login in pam"
+    echo "login auth required pam_rhosts_auth.so no_rhosts" >>/etc/pam.d/rlogin
 }
 
 function lock_root() {
@@ -1052,6 +1037,14 @@ password_pbkdf2 $grub_user $grub_pass" >/etc/grub.d/40_custom
     update-grub
 }
 
+function disable_ctrlaltdel() {
+    echo "Masking ctrl-alt-del.target"
+    systemctl mask ctrl-alt-del.target
+
+    echo "exec true" >>/etc/init/control-alt-delete.override
+    echo "Finished disabling ctrl-alt-del"
+}
+
 function print_help() {
     echo \
         "
@@ -1134,8 +1127,7 @@ funcs=(
     manage_users
     change_passwords
     expiry
-    setup_cracklib
-    setup_pwquality
+    setup_pam
     lock_root
     list_disallowed_files
     kernel_parameters
@@ -1162,6 +1154,8 @@ funcs=(
     postgres
     watchccs
     stopwatchccs
+    grub
+    disable_ctrlaltdel
 )
 
 re='^[0-9]+$'
