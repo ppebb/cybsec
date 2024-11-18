@@ -5,6 +5,8 @@ set -e
 
 source ./utils.sh
 
+sec_pass="rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md"
+
 perms_search_root="/home/"
 high_perm_min="700"
 high_perm_log="$log_base/high-perms.log"
@@ -162,7 +164,7 @@ function change_passwords() {
         fi
 
         echo "Changing password for $user"
-        echo "$user:rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md" | chpasswd
+        echo "$user:$sec_pass" | chpasswd
         echo "Clearing Finger for $user"
         chfn -f "" -h "" -o "" -r "" -w "" "$user"
     done
@@ -172,7 +174,7 @@ function change_passwords() {
             echo "Attempted to change password for admin '$user', but they do not exist"
         elif ! [[ "$vm_user" == "$user" ]]; then # WARN: This should probably work. But make sure you know this password just in case
             echo "Changing password for admin $user"
-            echo "$user:rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md" | chpasswd
+            echo "$user:$sec_pass" | chpasswd
             echo "Clearing Finger for admin $user"
             chfn -f "" -h "" -o "" -r "" -w "" "$user"
         fi
@@ -403,7 +405,8 @@ kparams=(
     "net.ipv4.conf.all.proxy_arp=0"
     "net.ipv4.tcp_timestamps=0"
 
-    "fs.file-max=65535"
+    # Might be bad
+    #"fs.file-max=65535"
     "kernel.pid_max=65536"
     "net.core.netdev_max_backlog=5000"
     "net.core.rmem_max=8388608"
@@ -651,6 +654,44 @@ function verify_perms() {
         if [ -f tmphomefiles ]; then
             rm tmphomefiles
         fi
+
+        local ssh_dir="/home/${i}/.ssh"
+        if [ -d "$ssh_dir" ]; then
+            chmod 700 "$ssh_dir"
+
+            local auth_keys="$ssh_dir/authorized_keys"
+            if [ -e "$auth_keys" ]; then
+                chmod 600 "$auth_keys"
+            fi
+
+            local config="$ssh_dir/config"
+            if [ -e "$config" ]; then
+                chmod 600 "$config"
+            fi
+
+            local id="$ssh_dir/identity"
+            if [ -e "$id" ]; then
+                chmod 600 "$id"
+            fi
+
+            shopt -s nullglob
+
+            for key in "$ssh_dir/"*_dsa; do
+                echo "$sec_pass" | ssh-keygen -p -f "$key"
+                chown 600 "$key"
+            done
+
+            for key in "$ssh_dir/"*_rsa; do
+                echo "$sec_pass" | ssh-keygen -p -f "$key"
+                chown 600 "$key"
+            done
+
+            for pubkey in "$ssh_dir/"*.pub; do
+                chown 644 "$pubkey"
+            done
+
+            shopt -u nullglob
+        fi
     done
 
     find "$perms_search_root" -type f -perm "-$high_perm_min" >"$high_perm_log"
@@ -886,6 +927,24 @@ function sshd() {
 
     apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$sshd_conf" "${sshd_settings[@]}"
 
+    local text
+    text=$(cat "$sshd_conf")
+    local regexp="[^#]Port\s*([0-9]*)"
+    local port=""
+
+    echo "Allowing sshd through ufw"
+
+    if [[ $text =~ $regexp ]]; then
+        port="${BASH_REMATCH[1]}"
+    fi
+
+    if [ -z "$port" ]; then
+        echo "No port set in $sshd_conf, defaulting to 22"
+        port="22"
+    fi
+
+    ufw allow "$port"
+
     systemctl enable sshd.service
     systemctl restart sshd.service
 }
@@ -908,6 +967,10 @@ function apache2() {
 
     apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$apache2_conf" "${apache2_settings[@]}"
 
+    echo "Allowing apache2 through ufw"
+    ufw allow 80
+    ufw allow 443
+
     systemctl enable apache2.service
     systemctl restart apache2.service
 }
@@ -927,6 +990,10 @@ function vsftpd() {
 
     apply_params_list "=" "^::param::\s*=\s*(NO|YES)*" "$vsftpd_conf" "${vsftpd_settings[@]}"
 
+    echo "Allowing vsftpd through ufw"
+    ufw allow 20
+    ufw allow 21
+
     systemctl enable vsftpd.service
     systemctl restart vsftpd.service
 }
@@ -943,12 +1010,35 @@ function postgres() {
     false
 }
 
+function watchccs() {
+    if ! prompt_install "inotify-tools"; then
+        return
+    fi
+
+    if [ -z $(pgrep -f "watchccs.sh") ]; then
+        bash ./watchccs.sh
+        return
+    fi
+
+    echo "ccs is already being watched! Check for logs in $log_base/ccs"
+}
+
+function stopwatchccs() {
+    pid=$(pgrep -f "watchccs.sh")
+
+    if [ -z "$pid" ]; then
+        echo "ccs is not being monitored!"
+    else
+        kill "$pid"
+        echo "Killed watchccs.sh"
+    fi
+}
+
 # NOTE: I don't really know what this is doing or why it's here.
-grub_pass_base="rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md"
 # username for grub authentication
 grub_user="2oe"
-# creates encrypted grub password (same as $grub_pass_base)
-grub_pass=$(printf '%s\n%s' "$grub_pass_base" "$grub_pass_base" | grub-mkpasswd-pbkdf2 | tr -d '\n' | sed -e 's/Enter password: Reenter password: PBKDF2 hash of your password is //g')
+# creates encrypted grub password (same as $sec_pass)
+grub_pass=$(printf '%s\n%s' "$sec_pass" "$sec_pass" | grub-mkpasswd-pbkdf2 | tr -d '\n' | sed -e 's/Enter password: Reenter password: PBKDF2 hash of your password is //g')
 function grub() {
     chown root:root /boot/grub/grub.cfg
     chmod 400 /boot/grub/grub.cfg
@@ -968,7 +1058,6 @@ function print_help() {
 ppeb's cyber patriot linux script!!!
 
 Usage: script.sh [OPTIONS]
- --users                       Comma/semicolon separated list of your user, administrators, normal users, and passwords: {your user;admin1,admin2,admin3;normal1,normal2,normal3;password1,password2}. Note that if the password contains commas you're fucked
  --readme                      Link to grab readme from; will be parsed for authorized users and administrators
 "
 }
@@ -995,7 +1084,7 @@ while [[ $# -gt 0 ]]; do
         print_help
         exit
         ;;
-    --users) ;;
+    #--users) ;; Unimplemented as it was useless
     --readme)
         readme_exp="Authorized Administrators:(.*?)<b>Authorized Users:<\/b>(.*?)<\/pre>"
 
@@ -1010,8 +1099,6 @@ while [[ $# -gt 0 ]]; do
             text=$(cat "$file")
         fi
 
-        # PRAYING THIS WORKS OR I'LL KILL MYSELF
-        # Update: It works. I'm not killing myself
         if [[ $text =~ $readme_exp ]]; then
             admins="${BASH_REMATCH[1]}"
             allowed_users_orig="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
@@ -1073,6 +1160,8 @@ funcs=(
     mysql
     nginx
     postgres
+    watchccs
+    stopwatchccs
 )
 
 re='^[0-9]+$'
