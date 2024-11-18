@@ -945,8 +945,8 @@ function sshd() {
 
     ufw allow "$port"
 
-    systemctl enable sshd.service
-    systemctl restart sshd.service
+    systemctl enable ssh.service
+    systemctl restart ssh.service
 }
 
 apache2_conf="/etc/apache2/apache2.conf"
