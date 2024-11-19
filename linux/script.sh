@@ -1094,16 +1094,11 @@ while [[ $# -gt 0 ]]; do
 
         if [[ $text =~ $readme_exp ]]; then
             admins="${BASH_REMATCH[1]}"
-            allowed_users_orig="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
-            allowed_users=""
-
-            # Trim characters that were breaking certain things
-            for allowed_user in $allowed_users_orig; do
-                allowed_users+=" ${allowed_user//[$'\t\r\n ']/}"
-            done
+            allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
 
             admins=${admins#*$'\n'}
             # There should no longer be random newlines here
+            allowed_users=$(echo "$allowed_users" | sed "s/\n//g" | sed "s/\r//g")
             passwords=$(echo "$admins" | grep "password" | sed "s/password: //g" | sed "s/^[ \t]*//")
             admins=$(echo "$admins" | grep -v "password" | sed "s/(you)//g" | tr -d "\r")
             vm_user=$(echo "$admins" | head -n1 | tr -cd "[:alnum:]._-")
