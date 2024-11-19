@@ -1153,16 +1153,27 @@ funcs=(
     disable_ctrlaltdel
 )
 
+funcs_len=${#funcs[@]}
+funcs_strlen=${#funcs_len}
+
+# $1: index
+# $2: name
+function fmt_entry() {
+    # Spaces is length of the highest index minus length of current index
+    prefix="($1)$(repl ' ' $((funcs_strlen - ${#i} + 1)))"
+    line="$prefix$2"
+    # Trailing spaces make each column 27 wide
+    echo "$line$(repl ' ' $((27 - ${#line})))"
+}
+
 re='^[0-9]+$'
 function menu() {
     echo
 
-    # Spacing is a little off once it gets to 2 digits but I don't care. Someone else can fix it
     for ((i = 0; i < ${#funcs[@]}; i += 2)); do
-        prefix="($i)"
-        line="$prefix ${funcs[i]}"
+        line=$(fmt_entry "$i" "${funcs[i]}")
         if [ -n "${funcs[i + 1]}" ]; then
-            line="$line$(repl ' ' $((25 - (${#funcs[i]} + ${#prefix}))))($((i + 1))) ${funcs[i + 1]}"
+            line="$line$(fmt_entry "$((i + 1))" "${funcs[i + 1]}")"
         fi
         echo "$line"
     done

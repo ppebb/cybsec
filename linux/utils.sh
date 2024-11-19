@@ -17,7 +17,12 @@ function popd {
 
 # Repeat a given character
 function repl() {
-    printf "$1"'%.s' $(eval "echo {1.."$(($2))"}")
+    ret=""
+    for ((i = 0; i < $2; i++)); do
+        ret="$ret$1"
+    done
+
+    echo "$ret"
 }
 
 function get_users() {
