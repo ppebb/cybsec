@@ -1071,8 +1071,13 @@ function disable_ctrlaltdel() {
 }
 
 function reset_all_configs() {
+    if [ -d "/etc-bak/" ]; then
+        echo "Existing backup found at /etc-bak/, remove it before continuing!"
+        return
+    fi
+
     echo "Backing up existing configurations to /etc-bak/"
-    mkdir /etc-bak/
+    mkdir -p /etc-bak/
     cp -r /etc/* /etc-bak/
 
     local packages=()
