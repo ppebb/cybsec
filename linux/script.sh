@@ -227,8 +227,6 @@ function expiry() {
 commonpwd_conf="/etc/pam.d/common-password"
 commonauth_conf="/etc/pam.d/common-auth"
 
-# TODO: Make cracklib and pwquality have less redundant code because they do basically the same thing
-
 pwstrength_opts="minlen=16 difok=4 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 gecoscheck=1 dictcheck=1 retry=3"
 pam_unix_opts="obscure use_authtok try_first_pass sha512crypt remember=12"
 pam_count_opts="deny=5 audit onerr=fail unlock_time=1800 even_deny_root"
@@ -577,43 +575,50 @@ files_needing_exec=(
     "script.sh"
 )
 
-function verify_perms() {
-    # These should be covered by the hashes but check them anyway just in case
-    # check_perm /etc/passwd 644 false
-    # check_perm /etc/group 644 false
-    # check_perm /etc/shadow 0 false
+default_perms=(
+    "/etc/ssh/sshd_config" "root:root" "og-rwx"
+    "/etc/passwd" "root:root" "644"
+    "/etc/shadow" "root:shadow" "o-rwx,g-wx"
+    "/etc/group" "root:root" "644"
+    "/etc/gshadow" "root:shadow" "o-rwx,g-rw"
+    "/etc/passwd-" "root:root" "600"
+    "/etc/shadow-" "root:root" "600"
+    "/etc/group-" "root:root" "600"
+    "/etc/gshadow-" "root:root" "600"
+    "/etc/sudoers" "root:root" "644"
+    "/root" "root:root" "700"
+    "/etc/securetty" "" "600"
+    "/etc/sudo.conf" "root:root" "644"
+    "/etc/sudoers" "root:root" "440"
+    "/etc/sudo_logsrvd.conf" "root:root" "644"
+)
 
+for file in /etc/sudoers.d/*; do
+    default_perms+=("$file" "root:root" "440")
+done
+
+function verify_perms() {
     chmod -R g-wx,o-rwx /var/log/*
 
-    chown root:root /etc/ssh/sshd_config
-    chmod og-rwx /etc/ssh/sshd_config
+    for ((i = 0; i < ${#default_perms[@]}; i += 3)); do
+        local path="${default_perms[i]}"
+        local owner="${default_perms[i + 1]}"
+        local perms="${default_perms[i + 2]}"
 
-    chown root:root /etc/passwd
-    chmod 644 /etc/passwd
+        echo "Setting permissions of $path, owner:${owner:-unchanged}, perms:${perms:-unchanged}"
 
-    chown root:shadow /etc/shadow
-    chmod o-rwx,g-wx /etc/shadow
+        if ! [ -e "$path" ]; then
+            continue
+        fi
 
-    chown root:root /etc/group
-    chmod 644 /etc/group
+        if [ -n "$owner" ]; then
+            chown "$owner" "$path"
+        fi
 
-    chown root:shadow /etc/gshadow
-    chmod o-rwx,g-rw /etc/gshadow
-
-    chown root:root /etc/passwd-
-    chmod 600 /etc/passwd-
-
-    chown root:root /etc/shadow-
-    chmod 600 /etc/shadow-
-
-    chown root:root /etc/group-
-    chmod 600 /etc/group-
-
-    chown root:root /etc/gshadow-
-    chmod 600 /etc/gshadow-
-
-    chmod 700 /root
-    chmod 600 /etc/securetty
+        if [ -n "$perms" ]; then
+            chmod "$perms" "$path"
+        fi
+    done
 
     # Fix home directory permissions
     echo "Checking home directory permissions"
@@ -852,6 +857,8 @@ function diff_default_files_inner() {
 function diff_default_files() {
     shopt -s dotglob
 
+    # TODO: Diff important system files like sudos
+
     # These files contain default, safe configurations and their hashes with user home local paths
     if ! [ -d "./default_files/" ]; then
         echo "Missing default_files directory. Please get them from the repo before continuing"
@@ -892,6 +899,8 @@ function fail2ban() {
 
     echo "Enabled fail2ban"
 }
+
+# TODO: Make applications/services log more! Check logrotate config and their own config for verbosity
 
 ssh_base="/etc/ssh"
 sshd_conf="$ssh_base/sshd_config"
@@ -1050,16 +1059,16 @@ function postgres() {
 smb_base="/etc/samba"
 smb_conf="$smb_base/smb.conf"
 smb_settings=(
-    "global" "max log size" "1000"
+    "global" "max log size" "10000"
     "global" "obey pam restrictions" "yes"
     "global" "map to guest" "never"
     "global" "usershare allow guests" "no"
     "global" "min protocol" "SMB2"
     "global" "smb encrypt" "required"
-    "homes" "browseable" "no"
-    "homes" "create mask" "0700"
-    "homes" "directory mask" "0700"
-    "homes" "valid users" "%S"
+    # "homes" "browseable" "no"
+    # "homes" "create mask" "0700"
+    # "homes" "directory mask" "0700"
+    # "homes" "valid users" "%S"
 )
 
 function samba() {
@@ -1149,6 +1158,17 @@ function disable_ctrlaltdel() {
 
     echo "exec true" >>/etc/init/control-alt-delete.override
     echo "Finished disabling ctrl-alt-del"
+}
+
+function logrotate() {
+    if ! prompt_install "logrotate"; then
+        return
+    fi
+
+    edit_or_append "^rotate\s*[0-9]*" "rotate 10" "/etc/logrotate.conf"
+
+    systemctl enable logrotate.service
+    systemctl restart logrotate.service
 }
 
 function reset_all_configs() {
@@ -1292,6 +1312,7 @@ funcs=(
     stopwatchccs
     grub
     disable_ctrlaltdel
+    logrotate
     reset_all_configs
 )
 
