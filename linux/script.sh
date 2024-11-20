@@ -893,7 +893,8 @@ function fail2ban() {
     echo "Enabled fail2ban"
 }
 
-sshd_conf="/etc/ssh/sshd_config"
+ssh_base="/etc/ssh"
+sshd_conf="$ssh_base/sshd_config"
 sshd_settings=(
     "LoginGraceTime 60"
     "PermitRootLogin no"
@@ -910,7 +911,8 @@ function sshd() {
         return
     fi
 
-    restore_and_backup_conf "openssh-server" "$sshd_conf"
+    restore_and_backup_conf "openssh-server" "$ssh_base"
+
     apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$sshd_conf" "${sshd_settings[@]}"
 
     local text
@@ -935,7 +937,8 @@ function sshd() {
     systemctl restart ssh.service
 }
 
-apache2_conf="/etc/apache2/apache2.conf"
+apache2_base="/etc/apache2"
+apache2_conf="$apache2_base/apache2.conf"
 apache2_settings=(
     # NOTE: Signature and Tokens may need to be set in /etc/apache2/conf-available/security.conf
     "ServerSignature Off"
@@ -951,8 +954,11 @@ function apache2() {
         return
     fi
 
-    restore_and_backup_conf "apache2" "$apache2_conf"
+    restore_and_backup_conf "apache2" "$apache2_base"
+
     apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$apache2_conf" "${apache2_settings[@]}"
+
+    recurse_perms "$apache2_base" 755 644 "root:root"
 
     echo "Allowing apache2 through ufw"
     ufw allow 80
@@ -979,6 +985,9 @@ function vsftpd() {
 
     apply_params_list "=" "^::param::\s*=\s*(NO|YES)*" "$vsftpd_conf" "${vsftpd_settings[@]}"
 
+    chmod 644 "$vsftpd_conf"
+    chown root:root "$vsftpd_conf"
+
     echo "Allowing vsftpd through ufw"
     ufw allow 20
     ufw allow 21
@@ -996,17 +1005,14 @@ function nginx() {
 }
 
 psql_version_regex="Version: ([0-9]*)+"
-psql_settings=(
-    "local all all   scram-sha-256"
-    "local replication all   scram-sha-256"
-)
+
 function postgres() {
     if ! prompt_install "postgresql"; then
         return
     fi
 
     local psql_info
-    psql_info=$(apt show postgresql)
+    psql_info=$(apt show postgresql 2>/dev/null)
 
     if [[ $psql_info =~ $psql_version_regex ]]; then
         psql_version=${BASH_REMATCH[1]}
@@ -1015,9 +1021,84 @@ function postgres() {
         psql_version=14
     fi
 
-    local psql_conf="/etc/postgresql/$psql_version/main/pg_hba.conf"
+    local psql_base="/etc/postgresql/$psql_version"
+    local psql_conf="$psql_base/main/pg_hba.conf"
 
-    restore_and_backup_conf "postgres" "$psql_conf"
+    restore_and_backup_conf "postgresql" "$psql_base"
+
+    recurse_perms "$psql_base" 755 644 "postgres:postgres"
+
+    echo "Forcing password for local connections"
+    # change peer to scram-sha-256
+    # local   all             all                                     peer
+    sed -i "s/\(local\s*all\s*all\s*\)peer/\1scram-sha-256/" "$psql_conf"
+
+    # change peer to scram-sha-256
+    # local   replication     all                                     peer
+    sed -i "s/\(local\s*replication\s*all\s*\)peer/\1scram-sha-256/" "$psql_conf"
+
+    echo "Allowing postgresql through ufw"
+    ufw allow 5432
+
+    systemctl enable postgresql.service
+    systemctl restart postgresql.service
+
+    # IMPORTANT!!!!
+    echo "Ensure to check for user mappings to the postgres user!!!"
+}
+
+smb_base="/etc/samba"
+smb_conf="$smb_base/smb.conf"
+smb_settings=(
+    "global" "max log size" "1000"
+    "global" "obey pam restrictions" "yes"
+    "global" "map to guest" "never"
+    "global" "usershare allow guests" "no"
+    "global" "min protocol" "SMB2"
+    "global" "smb encrypt" "required"
+    "homes" "browseable" "no"
+    "homes" "create mask" "0700"
+    "homes" "directory mask" "0700"
+    "homes" "valid users" "%S"
+)
+
+function samba() {
+    if ! prompt_install "samba"; then
+        return
+    fi
+
+    restore_and_backup_conf "samba" "$smb_base"
+
+    recurse_perms "$smb_base" 755 644 "root:root"
+
+    for ((i = 0; i < ${#smb_settings[@]}; i += 3)); do
+        local section="${smb_settings[i]}"
+        local section_safe="\\[$section\\]"
+        section="[$section]"
+        local setting="${smb_settings[i + 1]}"
+        local value="${smb_settings[i + 2]}"
+        echo "Setting $section $setting = $value"
+
+        if grep -qw "$section_safe" <$smb_conf; then
+            sed -i "s/^.*$section_safe$/$section_safe/" "$smb_conf"
+        else
+            echo "$section" >>"$smb_conf"
+        fi
+
+        # Clear any line setting the value we intend to set
+        sed -i "s/^.*${setting}.*$//" "$smb_conf"
+
+        # Put it at the beginning of the relevant section
+        sed -i "s/$section_safe/$section\n$setting = $value/" "$smb_conf"
+    done
+
+    echo "Allowing smbd through ufw"
+
+    ufw allow 139
+    ufw allow 445
+
+    systemctl enable smbd.service
+    systemctl restart smbd.service
 }
 
 function watchccs() {
@@ -1206,6 +1287,7 @@ funcs=(
     mysql
     nginx
     postgres
+    samba
     watchccs
     stopwatchccs
     grub

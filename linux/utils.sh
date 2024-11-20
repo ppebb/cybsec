@@ -38,7 +38,9 @@ function user_exists() {
     fi
 }
 
-# Pattern to match, text, file to check
+# $1 pattern to match
+# $2 text
+# $3 file to check
 function edit_or_append() {
     local bf="$3-bak"
     if [ -e "$3" ]; then
@@ -156,7 +158,7 @@ function apply_params_list() {
     done
 }
 
-backup_dir="/etc/conf_backup/"
+backup_dir="/etc/conf_backup"
 # $1 the package name
 # $2 the config directory to restore
 function restore_and_backup_conf() {
@@ -186,4 +188,33 @@ function array_contains() {
     done
 
     return 1 # false
+}
+
+# $1 path
+# $2 folder octal
+# $3 file octal
+function recurse_perms_inner() {
+    for p in "$1/"*; do
+        if [ -d "$p" ]; then
+            chmod "$2" "$p"
+            recurse_perms_inner "$p" "$2" "$3"
+        elif [ -f "$p" ]; then
+            chmod "$3" "$p"
+        fi
+    done
+}
+
+# $1 path
+# $2 folder octal
+# $3 file octal
+# $4 user:group pair
+function recurse_perms() {
+    shopt -s nullglob dotglob
+
+    echo "Setting permissions of files to $3 and folders to $2 within $1, setting owner to $4"
+
+    chown -R "$4" "$1"
+    recurse_perms_inner "$1" "$2" "$3"
+
+    shopt -u nullglob dotglob
 }
