@@ -155,3 +155,35 @@ function apply_params_list() {
         edit_or_append "$regex" "$param_string" "$config_file"
     done
 }
+
+backup_dir="/etc/conf_backup/"
+# $1 the package name
+# $2 the config directory to restore
+function restore_and_backup_conf() {
+    local pkg_backup_dir="$backup_dir/$1"
+    mkdir -p "$pkg_backup_dir"
+
+    echo "Backing up $2 to $pkg_backup_dir"
+    cp -r "$2" "$pkg_backup_dir"
+
+    echo "Restoring default config"
+
+    apt install --reinstall -o Dpkg::Options::="--force-confask,confnew,confmiss" "$1"
+
+    echo "Finished restoring config for $1"
+}
+
+# $1 element
+# $2 array
+function array_contains() {
+    local test="$1"
+    shift
+    local array=("$@")
+    for e in "${array[@]}"; do
+        if [ "$e" = "$test" ]; then
+            return 0 # true
+        fi
+    done
+
+    return 1 # false
+}

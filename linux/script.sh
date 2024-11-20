@@ -910,6 +910,7 @@ function sshd() {
         return
     fi
 
+    restore_and_backup_conf "openssh-server" "$sshd_conf"
     apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$sshd_conf" "${sshd_settings[@]}"
 
     local text
@@ -950,6 +951,7 @@ function apache2() {
         return
     fi
 
+    restore_and_backup_conf "apache2" "$apache2_conf"
     apply_params_list " " "^::param::\s*[0-9a-zA-Z]*" "$apache2_conf" "${apache2_settings[@]}"
 
     echo "Allowing apache2 through ufw"
@@ -973,6 +975,8 @@ function vsftpd() {
         return
     fi
 
+    restore_and_backup_conf "vsftpd" "$vsftpd_conf"
+
     apply_params_list "=" "^::param::\s*=\s*(NO|YES)*" "$vsftpd_conf" "${vsftpd_settings[@]}"
 
     echo "Allowing vsftpd through ufw"
@@ -991,8 +995,29 @@ function nginx() {
     false
 }
 
+psql_version_regex="Version: ([0-9]*)+"
+psql_settings=(
+    "local all all   scram-sha-256"
+    "local replication all   scram-sha-256"
+)
 function postgres() {
-    false
+    if ! prompt_install "postgresql"; then
+        return
+    fi
+
+    local psql_info
+    psql_info=$(apt show postgresql)
+
+    if [[ $psql_info =~ $psql_version_regex ]]; then
+        psql_version=${BASH_REMATCH[1]}
+    else
+        echo "Unable to find psql version from apt, defaulting to 14"
+        psql_version=14
+    fi
+
+    local psql_conf="/etc/postgresql/$psql_version/main/pg_hba.conf"
+
+    restore_and_backup_conf "postgres" "$psql_conf"
 }
 
 function watchccs() {
@@ -1043,6 +1068,35 @@ function disable_ctrlaltdel() {
 
     echo "exec true" >>/etc/init/control-alt-delete.override
     echo "Finished disabling ctrl-alt-del"
+}
+
+function reset_all_configs() {
+    echo "Backing up existing configurations to /etc-bak/"
+    mkdir /etc-bak/
+    cp -r /etc/* /etc-bak/
+
+    local packages=()
+    for dir in /etc/*; do
+        set +e
+        local owners
+        # shellcheck disable=2207
+        owners=($(dpkg -S "$dir" 2>/dev/null | sed "s/,//g; s/:.*//"))
+        set -e
+
+        if [ -z "${owners[*]}" ]; then
+            echo "Directory $dir is not owned by any packages, skipping..."
+            continue
+        fi
+
+        for owner in "${owners[@]}"; do
+            if ! array_contains "$owner" "${packages[@]}"; then
+                packages+=("$owner")
+            fi
+        done
+    done
+
+    echo "Restoring config files for ${packages[*]}"
+    apt install --reinstall -o Dpkg::Options::="--force-confask,confnew,confmiss" "${packages[@]}"
 }
 
 function print_help() {
@@ -1151,13 +1205,14 @@ funcs=(
     stopwatchccs
     grub
     disable_ctrlaltdel
+    reset_all_configs
 )
 
 funcs_len=${#funcs[@]}
 funcs_strlen=${#funcs_len}
 
-# $1: index
-# $2: name
+# $1 index
+# $2 name
 function fmt_entry() {
     # Spaces is length of the highest index minus length of current index
     prefix="($1)$(repl ' ' $((funcs_strlen - ${#i} + 1)))"
