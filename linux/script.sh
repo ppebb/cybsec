@@ -738,15 +738,7 @@ cronfiles=(
 shopt -u nullglob
 
 function check_crontabs() {
-    for file in "${cronfiles[@]}"; do
-        prompt_y_n_quit "View contents of $file [y/N/q] "
-        response=$?
-        if [ $response -eq 0 ]; then
-            less <"$file"
-        elif [ $response -eq 2 ]; then
-            break
-        fi
-    done
+    view_all_files "${cronfiles[@]}"
 
     users=$(get_users)
 
@@ -1160,6 +1152,11 @@ function disable_ctrlaltdel() {
     echo "Finished disabling ctrl-alt-del"
 }
 
+shopt -s nullglob
+logrotate_files=(
+    /etc/logrotate.d/*
+)
+shopt -u nullglob
 function logrotate() {
     if ! prompt_install "logrotate"; then
         return
@@ -1169,6 +1166,8 @@ function logrotate() {
 
     systemctl enable logrotate.service
     systemctl restart logrotate.service
+
+    view_all_files "${logrotate_files[@]}"
 }
 
 function reset_all_configs() {

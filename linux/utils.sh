@@ -218,3 +218,17 @@ function recurse_perms() {
 
     shopt -u nullglob dotglob
 }
+
+# $1 array of files
+function view_all_files() {
+    for file in "$@"; do
+        prompt_y_n_quit "View contents of $file [y/N/q] "
+        response=$?
+
+        if [ $response -eq 0 ]; then
+            less <"$file"
+        elif [ $response -eq 2 ]; then
+            break
+        fi
+    done
+}
