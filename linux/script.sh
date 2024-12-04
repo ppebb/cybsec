@@ -143,7 +143,16 @@ function manage_users() {
         fi
 
         if ! echo "$user" | grep -qw "admin\|wheel\|staff\|sudo\|sudoers\|adm\|lpadm"; then
-            echo "User $user appears not to be an administrator when they should be"
+            # TODO: Untested...
+            if prompt_y_n "User $user appears not to be an administrator when they should be, add them? [y/N] "; then
+                for group in "${admin_groups[@]}"; do
+                    # shellcheck disable=2046
+                    if [ $(getent group "$group") ]; then
+                        echo "Adding user $user to group $group"
+                        gpasswd -a "$user" "$group"
+                    fi
+                done
+            fi
         fi
     done
 
