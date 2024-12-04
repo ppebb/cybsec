@@ -260,6 +260,8 @@ function setup_pam() {
         lib_sed="s/\(pam_pwquality\.so.*\)$/\1 $pwstrength_opts/"
         unix_sed="s/\(pam_unix\.so.*\)$/\1 $pam_unix_opts/"
 
+        common_auth_string="auth required pam_faillock.so $pam_count_opts"
+
         libname="pwquality"
         ;;
     *)
