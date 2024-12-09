@@ -495,6 +495,7 @@ bad_software_list=(
     "cryptcat"
     "tightvncserver"
     "x11vnc"
+    "4g8"
 )
 
 function bad_software() {
