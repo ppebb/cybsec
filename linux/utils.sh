@@ -232,3 +232,11 @@ function view_all_files() {
         fi
     done
 }
+
+function is_mint() {
+    if [ -e "/etc/issue" ] && grep -qw "Mint" </etc/issue; then
+        return 0
+    fi
+
+    return 1
+}

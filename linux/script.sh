@@ -17,6 +17,7 @@ setuid_gid_log="$log_base/setuid_gid.log"
 media_files_log="$log_base/media_files.log"
 downloaded_packages_log="$log_base/downloaded_packages.log"
 
+linux_image_pattern="linux-image-[0-9]*\.[0-9]*\.[0-9]*-[0-9]*-generic"
 function update() {
     echo "Running full system upgrade"
 
@@ -26,6 +27,15 @@ function update() {
     fi
 
     apt update && apt upgrade -y && apt dist-upgrade -y
+
+    if is_mint; then
+        local kernel_pkg
+        kernel_pkg=$(apt search linux-image | grep "$linux_image_pattern" | awk '{ print $2 }' | tail -n1)
+
+        if prompt_y_n "Attempting to install kernel package $kernel_pkg, continue? [y/N] "; then
+            apt install "$kernel_pkg"
+        fi
+    fi
 
     echo "Done updating"
 }
@@ -45,7 +55,7 @@ function auto_update() {
 
     cp -f "$apt_periodic_conf" "$apt_autoupgrade_conf"
 
-    if [ -e "/etc/issue" ] && grep -qw "Mint" </etc/issue; then
+    if is_mint; then
         echo "Enabling automatic updates for Linux Mint"
         mintupdate-automation upgrade enable
     fi
