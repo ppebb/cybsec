@@ -1232,6 +1232,42 @@ function reset_all_configs() {
     apt install --reinstall -o Dpkg::Options::="--force-confask,confnew,confmiss" "${packages[@]}"
 }
 
+function diff_services() {
+    read -r -p "Which distribution to check against? [debian/ubuntu/mint] " distro
+
+    local services_file="./default_files/$distro/services"
+    local services_temp="./default_files/$distro/services-temp"
+
+    if ! [ -f "$services_file" ]; then
+        "Either the distribution '$distro' is unknown, or the default services are missing!"
+        return
+    fi
+
+    systemctl list-units --type=service --state=active >"$services_temp"
+
+    diff --color=auto "$services_temp" "$services_file"
+
+    rm "$services_temp"
+}
+
+function diff_packages() {
+    read -r -p "Which distribution to check against? [debian/ubuntu/mint] " distro
+
+    local packages_file="./default_files/$distro/packages"
+    local packages_temp="./default_files/$distro/packages-temp"
+
+    if ! [ -f "$packages_file" ]; then
+        "Either the distribution '$distro' is unknown, or the default packages are missing!"
+        return
+    fi
+
+    apt list --installed >"$packages_temp" 2>/dev/null
+
+    diff --color=auto "$packages_temp" "$packages_file"
+
+    rm "$packages_temp"
+}
+
 function print_help() {
     echo \
         "
@@ -1341,6 +1377,8 @@ funcs=(
     disable_ctrlaltdel
     logrotate
     reset_all_configs
+    diff_services
+    diff_packages
 )
 
 funcs_len=${#funcs[@]}
