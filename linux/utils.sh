@@ -240,3 +240,23 @@ function is_mint() {
 
     return 1
 }
+
+function os_name() {
+    if uname -a | grep -iqw "ubuntu"; then
+        echo "ubuntu"
+        return
+    fi
+
+    if uname -a | grep -iqw "debian"; then
+        echo "debian"
+        return
+    fi
+
+    if is_mint; then
+        echo "mint"
+        return
+    fi
+
+    echo "Unknown operating system $(uname -a)"
+    exit 1
+}

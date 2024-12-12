@@ -1233,37 +1233,43 @@ function reset_all_configs() {
 }
 
 function diff_services() {
-    read -r -p "Which distribution to check against? [debian/ubuntu/mint] " distro
+    local distro
+    distro=$(os_name)
 
     local services_file="./default_files/$distro/services"
     local services_temp="./default_files/$distro/services-temp"
 
     if ! [ -f "$services_file" ]; then
-        "Either the distribution '$distro' is unknown, or the default services are missing!"
+        "The default services file '$services_file' is missing!"
         return
     fi
 
     systemctl list-units --type=service --state=active >"$services_temp"
 
-    diff --color=auto "$services_temp" "$services_file"
+    set +e
+    diff --color=auto "$services_file" "$services_temp"
+    set -e
 
     rm "$services_temp"
 }
 
 function diff_packages() {
-    read -r -p "Which distribution to check against? [debian/ubuntu/mint] " distro
+    local distro
+    distro=$(os_name)
 
     local packages_file="./default_files/$distro/packages"
     local packages_temp="./default_files/$distro/packages-temp"
 
     if ! [ -f "$packages_file" ]; then
-        "Either the distribution '$distro' is unknown, or the default packages are missing!"
+        "The default packages file '$services_file' is missing!"
         return
     fi
 
     apt list --installed >"$packages_temp" 2>/dev/null
 
-    diff --color=auto "$packages_temp" "$packages_file"
+    set +e
+    diff --color=auto "$packages_file" "$packages_temp"
+    set -e
 
     rm "$packages_temp"
 }
@@ -1302,6 +1308,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     #--users) ;; Unimplemented as it was useless
     --readme)
+        if ! prompt_install "curl"; then
+            return
+        fi
+
         readme_exp="Authorized Administrators:(.*?)<b>Authorized Users:<\/b>(.*?)<\/pre>"
 
         file=$(echo -n "$2" | md5sum | awk '{print $1}')
