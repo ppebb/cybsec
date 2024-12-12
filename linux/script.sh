@@ -320,15 +320,15 @@ function lock_root() {
     echo "Locked root account"
 }
 
-media_files_raw=("aa" "aac" "aax" "act" "aif" "aiff" "alac" "amr" "ape" "au" "awb" "dss" "dvf" "flac" "gsm" "iklax" "ivs" "m4a" "m4b" "mmf" "mp3" "mpc" "msv" "nmf" "ogg" "oga" "mogg" "opus" "ra" "raw" "rf64" "sln" "tta" "voc" "vox" "wav" "wma" "wv" "8svx" "cda" "webm" "mkv" "flv" "vob" "ogv" "ogg" "drc" "gif" "gifv" "mng" "avi" "mts" "m2ts" "mov" "qt" "wmv" "yuv" "rm" "rmvb" "viv" "asf" "amv" "mp4" "m4p" "m4v" "mpg" "mp2" "mpeg" "mpe" "mpv" "m2v" "svi" "3gp" "3g2" "mxf" "roq" 'nsv' "f4v" "f4p" "f4a" "f4b" "png" "jpg" "jpeg" "jfif" "exif" "tif" "tiff" "gif" "bmp" "ppm" "pgm" "pbm" "pnm" "webp" "heif" "avif" "ico" "tga" "psd" "xcf")
+media_files_raw=("aa" "aac" "aax" "act" "aif" "aiff" "alac" "amr" "ape" "au" "awb" "dss" "dvf" "flac" "gsm" "iklax" "ivs" "m4a" "m4b" "mmf" "mp3" "mpc" "msv" "nmf" "ogg" "oga" "mogg" "opus" "ra" "raw" "rf64" "sln" "tta" "voc" "vox" "wav" "wma" "wv" "8svx" "cda" "webm" "mkv" "flv" "vob" "ogv" "ogg" "drc" "gif" "gifv" "mng" "avi" "mts" "m2ts" "mov" "qt" "wmv" "yuv" "rm" "rmvb" "viv" "asf" "amv" "mp4" "m4p" "m4v" "mpg" "mp2" "mpeg" "mpe" "mpv" "m2v" "svi" "3gp" "3g2" "mxf" "roq" "nsv" "f4v" "f4p" "f4a" "f4b" "png" "jpg" "jpeg" "jfif" "exif" "tif" "tiff" "gif" "bmp" "ppm" "pgm" "pbm" "pnm" "webp" "heif" "avif" "ico" "tga" "psd" "xcf")
 
 # TODO: Who the fuck wrote this I need to edit it
 media_files=()
 
 # Convert list of extensions to parameters for find command
 for extension in "${media_files_raw[@]}"; do
-    if [ $media_files ]; then media_files+=('-o'); fi
-    media_files+=('-iname')
+    if [ $media_files ]; then media_files+=("-o"); fi
+    media_files+=("-iname")
     media_files+=("*.$extension")
 done
 
@@ -729,7 +729,7 @@ function verify_perms() {
     echo "Found $(wc -l <"$world_readable_log") world-readable files in $perms_search_root!"
 
     echo "Setting sticky bit on all world-writeable directories"
-    df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type d -perm -0002 2>/dev/null | xargs chmod a+t
+    df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type d -perm -0002 2>/dev/null | xargs chmod a+t
 }
 
 function check_rc_local() {
@@ -1158,7 +1158,7 @@ function stopwatchccs() {
 # username for grub authentication
 grub_user="2oe"
 # creates encrypted grub password (same as $sec_pass)
-grub_pass=$(printf '%s\n%s' "$sec_pass" "$sec_pass" | grub-mkpasswd-pbkdf2 | tr -d '\n' | sed -e 's/Enter password: Reenter password: PBKDF2 hash of your password is //g')
+grub_pass=$(printf "%s\n%s" "$sec_pass" "$sec_pass" | grub-mkpasswd-pbkdf2 | tr -d "\n" | sed -e "s/Enter password: Reenter password: PBKDF2 hash of your password is //g")
 function grub() {
     chown root:root /boot/grub/grub.cfg
     chmod 400 /boot/grub/grub.cfg
@@ -1319,7 +1319,7 @@ while [[ $# -gt 0 ]]; do
             admins="${BASH_REMATCH[1]}"
             allowed_users="${BASH_REMATCH[2]}" # DOES NOT INCLUDE ADMINS
 
-            admins=${admins#*$'\n'}
+            admins=${admins#*$"\n"}
             # There should no longer be random newlines here
             allowed_users=$(echo "$allowed_users" | sed "s/\n//g" | sed "s/\r//g")
             passwords=$(echo "$admins" | grep "password" | sed "s/password: //g" | sed "s/^[ \t]*//")
@@ -1388,13 +1388,13 @@ funcs_strlen=${#funcs_len}
 # $2 name
 function fmt_entry() {
     # Spaces is length of the highest index minus length of current index
-    prefix="($1)$(repl ' ' $((funcs_strlen - ${#i} + 1)))"
+    prefix="($1)$(repl " " $((funcs_strlen - ${#i} + 1)))"
     line="$prefix$2"
     # Trailing spaces make each column 27 wide
-    echo "$line$(repl ' ' $((27 - ${#line})))"
+    echo "$line$(repl " " $((27 - ${#line})))"
 }
 
-re='^[0-9]+$'
+re="^[0-9]+$"
 function menu() {
     echo
 
@@ -1405,7 +1405,7 @@ function menu() {
         fi
         echo "$line"
     done
-    read -r -p '> ' input
+    read -r -p "> " input
 
     if ! [[ $input =~ $re ]]; then
         echo "Please enter a number."
