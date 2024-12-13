@@ -6,66 +6,46 @@ source ./utils.sh
 
 directories=(
     "/etc"
-    #"/usr" # Don't check usr, has like 100k files...
+    "/usr"
     "/srv"
     "/opt"
     # What else to check...
 )
 
-# https://unix.stackexchange.com/questions/103920/parallelize-a-bash-for-loop
-# initialize a semaphore with a given number of tokens
-open_sem(){
-    mkfifo pipe-$$
-    exec 3<>pipe-$$
-    rm pipe-$$
-    local i=$1
-    for((;i>0;i--)); do
-        printf %s 000 >&3
-    done
-}
-
-# run the given command asynchronously and pop/push tokens
-run_with_lock(){
-    local x
-    # this read waits until there is something to read
-    read -u 3 -n 3 x && ((0==x)) || exit "$x"
-    (
-     ( "$@"; )
-    # push the return code of the command to the semaphore
-    printf '%.3d' $? >&3
-    )&
-}
-
-N=1000
 function hash_inner() {
     perm=$(stat -c "%a" "$1")
     if [ -d "$1" ]; then
         if [ -n "$1" ]; then
-            echo "d  $1  $perm" >> "$2"
+            echo "d  $1  $perm"
         fi
         return
     fi
 
-    sum=$(xxh64sum "$file")
+    sum=$(xxh64sum "$1")
     if [ -n "$sum" ]; then
-        echo "$sum  $perm" >> "$2"
+        echo "$sum  $perm"
     fi
 }
+export -f hash_inner
 
 function hash_all() {
-    if ! prompt_install "xxhash"; then
+    if ! (prompt_install "xxhash" && prompt_install "parallel"); then
         exit 1
+    fi
+
+    if [ -f "$1" ]; then
+        if prompt_y_n "File '$1' already exists. Replace with new hashes? [y/N] "; then
+            rm "$1"
+        else
+            return
+        fi
     fi
 
     echo "Hashing all files in ${directories[*]}"
 
-    open_sem $N
     for dir in "${directories[@]}"; do
-        files=$(find "$dir")
-
-        for file in $files; do
-            run_with_lock hash_inner "$file" "$1"
-        done
+        parallel_out=$(find "$dir" -print0 -not -xtype l | parallel -0 -j16 --pipe parallel -0 -j250 hash_inner {})
+        echo "$parallel_out" >> "$1"
     done
 }
 
@@ -117,7 +97,7 @@ function check_all() {
 
     # Check for new files. We don't care about new directories because if they don't contain any files it should be fine...
     for dir in "${directories[@]}"; do
-        files=$(find "$dir")
+        files=$(find "$dir" -not -xtype l)
 
         for file in $files; do
             if [ -d "$file" ]; then
