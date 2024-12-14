@@ -6,7 +6,7 @@ source ./utils.sh
 
 directories=(
     "/etc"
-    "/usr"
+    # "/usr"
     "/srv"
     "/opt"
     # What else to check...
