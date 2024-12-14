@@ -45,7 +45,7 @@ function hash_all() {
 
     for dir in "${directories[@]}"; do
         parallel_out=$(find "$dir" -print0 -not -xtype l | parallel -0 -j16 --pipe parallel -0 -j250 hash_inner {})
-        echo "$parallel_out" >> "$1"
+        echo "$parallel_out" >>"$1"
     done
 }
 
@@ -62,7 +62,7 @@ function check_all() {
 
     # Check that all files in the provided hash file both exist and match
     while read -r line; do
-        IFS="  " read -ra split <<< "$line"
+        IFS="  " read -ra split <<<"$line"
         local file="${split[1]}"
 
         if [ "${split[0]}" = "d" ]; then
@@ -73,7 +73,7 @@ function check_all() {
         fi
 
         if [ ! -e "$file" ]; then
-            echo "$file" >> "$log_base/missing.log"
+            echo "$file" >>"$log_base/missing.log"
             continue
         fi
 
@@ -81,7 +81,7 @@ function check_all() {
         newperm=$(stat -c "%a" "$file")
 
         if [ "$perm" != "$newperm" ]; then
-            echo "$file changed permissions from $perm to $newperm" >> "$log_base/perms.log"
+            echo "$file changed permissions from $perm to $newperm" >>"$log_base/perms.log"
         fi
 
         if [ -v sum ] && [ ! -d "$file" ]; then
@@ -90,10 +90,10 @@ function check_all() {
             newsum=$(xxh64sum "$file")
 
             if [ "$sum  $file" != "$newsum" ]; then
-                echo "$file" >> "$log_base/changed.log"
+                echo "$file" >>"$log_base/changed.log"
             fi
         fi
-    done < "$1"
+    done <"$1"
 
     # Check for new files. We don't care about new directories because if they don't contain any files it should be fine...
     for dir in "${directories[@]}"; do
@@ -106,7 +106,7 @@ function check_all() {
 
             # Sometimes gives false positives because of files that errored when hashing. Oh well.
             if [ -z "${sums_by_file["$file"]}" ]; then
-                echo "$file" >> "$log_base/new.log"
+                echo "$file" >>"$log_base/new.log"
             fi
 
         done
@@ -115,7 +115,7 @@ function check_all() {
 
 function print_help() {
     echo \
-"
+        "
 ppeb's full filesystem checker linux script!!!
 
 Usage: hash.sh --hash out_file OR hash.sh --check in_file
@@ -142,22 +142,22 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help)
-            print_help
-            exit
-            ;;
-        --hash)
-            hash_all "$2"
-            exit
-            ;;
-        --check)
-            check_all "$2"
-            exit
-            ;;
-        *)
-            echo "Unknown argument $1"
-            print_help
-            exit
-            ;;
+    -h | --help)
+        print_help
+        exit
+        ;;
+    --hash)
+        hash_all "$2"
+        exit
+        ;;
+    --check)
+        check_all "$2"
+        exit
+        ;;
+    *)
+        echo "Unknown argument $1"
+        print_help
+        exit
+        ;;
     esac
 done
