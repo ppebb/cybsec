@@ -100,9 +100,15 @@ def func2_user_rights_assignments():
         f"Take ownership of file or other objects": f"Administrators"
     }
     for name, users in user_rights.items():
-        ps_script = f"""
+        ps_script = """
         secedit /export /cfg C:\\secpol.inf
-        powershell -Command "Get-Content C:\\secpol.inf | ForEach-Object {{$_ -replace '^{name}=.*', '{name}={users}'}} | Set-Content C:\\secpol.inf"
+        powershell -Command "
+            Get-Content C:\\secpol.inf | 
+            ForEach-Object { 
+                $_ -replace '^{name}=.*', '{name}={users}'
+            } | 
+            Set-Content C:\\secpol.inf
+        "
         secedit /configure /cfg C:\\secpol.inf
         """
         try:
@@ -189,4 +195,16 @@ def func6_disable_guest_and_admin_accounts():
     except subprocess.SubprocessError as e:
         print("Error with Administrator account: " + e)
 
+ps_script = """
+secedit /export /cfg C:\\secpol.inf
+powershell -Command "
+    Get-Content C:\\secpol.inf | 
+    ForEach-Object { 
+        $_ -replace '^{name}=.*', '{name}={users}'
+    } | 
+    Set-Content C:\\secpol.inf
+"
+secedit /configure /cfg C:\\secpol.inf
+"""
+print(ps_script)
 main()
