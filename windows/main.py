@@ -23,6 +23,8 @@ def main():
         "1": func1_enable_auto_update,
         "2": func2_user_rights_assignments,
         "3": func3_start_event_log,
+        "4": func4_enable_firewall,
+        "5": func5_disable_enable_RDP,
     }
     choice = "0"
     while choice != "q":
@@ -37,6 +39,7 @@ def menu():
     print("""
         1) Enable auto updates                  2) Configure user rights assignments
         3) Configure Event Log Service          4) Enable Windows Firewall
+        5) Disable/Enable RDP                   
         q) exit
         """)
     try:
@@ -109,9 +112,9 @@ def func2_user_rights_assignments():
     print("All user rights assignemnts have been successfully configured")
 
 def func3_start_event_log():
+    print("Checking Event Log service status...")
     try:
         # Check if Event Log Service is running
-        print("Checking Event Log service status...")
         service_status = subprocess.run(
             ["powershell", "-Command", "Get-Service -Name EventLog | Select-Object -ExpandProperty Status"],
             capture_output=True, text=True, check=True
@@ -134,12 +137,41 @@ def func3_start_event_log():
         print(f"An unexpected error occurred: {e}")
 
 def func4_enable_firewall():
+    print("Enabling Windows Firewall for all profiles...")
     try:
-        print("Enabling Windows Firewall for all profiles...")
         # Enable Windows Firewall for Domain, Private, and Public profiles
         subprocess.run(["powershell", "-Command", "Set-NetFilrewallProfile -Profile Domain,Public,Private -Enabled True"], check=True)
         print("Windows Firewall enabled for all profiles.")
     except subprocess.SubprocessError as e:
         print("Error occured: " + e)
+
+def func5_disable_enable_RDP():
+    choice = input("Enable (e) or Disable (d) RDP? (e/d/q): ")
+    if choice == "e":
+        print("Enabling RDP ...")
+        try:
+            subprocess.run(["powershell", "-command", 'Set-ItemProperty -Path "HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server" -Name "fDenyTSConnections" -Value 0'])
+            print("RDP has been enabled successfully.")
+            print("Starting RDP services ...")
+            subprocess.run(["powershell", "-Command", 'Start-Service -Name "TermService"'])
+            print("Successfully started RDP services.")
+            print("Enabling automatic startup for RDP ...")
+            subprocess.run(["powershell", "-Command", 'Set-Service -Name "TermService" -StartupType Automatic'])
+            print("Successfully enabled automatic startup for RDP services.")
+        except subprocess.SubprocessError as e:
+            print("Error occured: " + e)
+    elif choice == "d":
+        print("Disabling RDP ...")
+        try:
+            subprocess.run(["powershell", "-Command", 'Set-ItemProperty -Path "HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server" -Name "fDenyTSConnections" -Value 1;'])
+            print("RDP has been disabled successfully.")
+            print("Stopping RDP services ...")
+            subprocess.run(["powershell", "-Command", 'Stop-Service -Name "TermService" -Force'])
+            print("Successfully stopped RDP services.")
+            print("Disabling automatic startup for RDP ...")
+            subprocess.run(["powershell", 'Set-Service -Name "TermService" -StartupType Disabled'])
+            print("Successfully disabled automatic startup for RDP services.")
+        except subprocess.SubprocessError as e:
+            print("ERror occured: " + e)
 
 main()
