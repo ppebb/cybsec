@@ -25,6 +25,7 @@ def main():
         "3": func3_start_event_log,
         "4": func4_enable_firewall,
         "5": func5_disable_enable_RDP,
+        "6": func6_disable_guest_and_admin_accounts,
     }
     choice = "0"
     while choice != "q":
@@ -39,7 +40,7 @@ def menu():
     print("""
         1) Enable auto updates                  2) Configure user rights assignments
         3) Configure Event Log Service          4) Enable Windows Firewall
-        5) Disable/Enable RDP                   
+        5) Disable/Enable RDP                   6) Disable guest and Administrator accounts
         q) exit
         """)
     try:
@@ -173,5 +174,19 @@ def func5_disable_enable_RDP():
             print("Successfully disabled automatic startup for RDP services.")
         except subprocess.SubprocessError as e:
             print("ERror occured: " + e)
+
+def func6_disable_guest_and_admin_accounts():
+    print("Disabling the guest account ...")
+    try:
+        subprocess.run(["powershell", "-Command", 'Disable-LocalUser -Name "Guest"'])
+        print("Successfully disabled the guest account.")
+    except subprocess.SubprocessError as e:
+        print("Error with guest account: " + e)
+    print("Disabling the Administrator account ...")
+    try:
+        subprocess.run(["powershell", "-Command", 'Disable-LocalUser -Name "Administrator"'])
+        print("Successfully disabled the Administrator account.")
+    except subprocess.SubprocessError as e:
+        print("Error with Administrator account: " + e)
 
 main()
