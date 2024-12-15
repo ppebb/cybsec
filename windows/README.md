@@ -2,12 +2,14 @@
 
 ## Required pip packages
 **Remember to remove all packages after completion!**
-<!-- - pywin32 -->
-- subprocesses
+- subprocesses (built-in)
 
 ## Script Points
-- System updates
+- Automatic system updates
 - User Rights Assignments
+- Enable Event Log Service
+- Enable WIndows Firewall
+- Enable/Disable RDP
 
 ## To Do
-- Web
+- Web Server configs
