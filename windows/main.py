@@ -24,6 +24,7 @@ def main():
     choicesDict = {
         "1": func1_enable_auto_update,
         "2": func2_user_rights_assignments,
+        "3": func3_start_event_log,
     }
     choice = "0"
     while choice != "q":
@@ -36,8 +37,9 @@ def main():
 
 def menu():
     print("""
-        1) Enable auto updates                 10) Test
-        2) Configure User Rights Assignments   
+        1) Enable auto updates                 2) Configure user rights assignments
+        3) Configure Event Log Service
+        q) exit
         """)
     try:
         choice = input()
@@ -55,45 +57,45 @@ def func1_enable_auto_update():
 
 def func2_user_rights_assignments():
     user_rights = {
-        "Access Credential Manager as a trusted caller": "No one",
-        "Access the computer from the network": "Administrators",
-        "Act as part of the operating system": "No one",
-        "Adjust memory quotas for a process": "Administrators, LOCAL SERVICE, NETWORK SERVICE",
-        "Allow log on locally": "Administrators, Users",
-        "Allow log on through Remote Desktop Services": "Administrators, Remote Desktop Users",
-        "Back up files and directories": "Administrators",
-        "Change system time": "Administrators, LOCAL SERVICE",
-        "Change the time zone": "Administrators, LOCAL SERVICE, Users",
-        "Create a pagefile": "Administrators",
-        "Create a token object": "No one",
-        "Create global objects": "Administrators, LOCAL SERVICE, NETWORK SERVICE, SERVICE",
-        "Create permanent shared objects": "No one",
-        "Create symbolic links": "Administrators",
-        "Debug programs": "Administrators",
-        "Deny access to this computer from the network": "Guest, Local account",
-        "Deny log on as a batch job": "Guest",
-        "Deny log on as a service": "Guest",
-        "Deny log on locally": "Guest",
-        "Deny log on through Remote Desktop Services": "Guest, Local account",
-        "Enable computer and user accounts to be trusted for delegation": "No one",
-        "Force shutdown from a remote system": "Administrators",
-        "Generate security audits": "LOCAL SERVICE, NETWORK SERVICE",
-        "Impersonate a client after authentication": "Administrators, LOCAL SERVICE, NETWORK SERVICE, SERVICE",
-        "Increase scheduling priority": "Administrators",
-        "Load and unload device drivers": "Administrators",
-        "Lock pages in memory": "No one",
-        "Log on as a batch job": "Administrators",
-        "Log on as a service": "No one",
-        "Manage auditing and security log": "Administrators",
-        "Modify an object label": "No one",
-        "Modify firmware environment values": "Administrators",
-        "Perform volume maintenance tasks": "Administrators",
-        "Profile single process": "Administrators",
-        "Profile system performance": "Administrators, NT SERVICE\\WdiServiceHost",
-        "Replace a process level token": "LOCAL SERVICE, NETWORK SERVICE",
-        "Restore files and directories": "Administrators",
-        "Shutdown the system": "Administrators, Users",
-        "Take ownership of file or other objects": "Administrators"
+        f"Access Credential Manager as a trusted caller": f"No one",
+        f"Access the computer from the network": f"Administrators",
+        f"Act as part of the operating system": f"No one",
+        f"Adjust memory quotas for a process": f"Administrators, LOCAL SERVICE, NETWORK SERVICE",
+        f"Allow log on locally": f"Administrators, Users",
+        f"Allow log on through Remote Desktop Services": f"Administrators, Remote Desktop Users",
+        f"Back up files and directories": f"Administrators",
+        f"Change system time": f"Administrators, LOCAL SERVICE",
+        f"Change the time zone": f"Administrators, LOCAL SERVICE, Users",
+        f"Create a pagefile": f"Administrators",
+        f"Create a token object": f"No one",
+        f"Create global objects": f"Administrators, LOCAL SERVICE, NETWORK SERVICE, SERVICE",
+        f"Create permanent shared objects": f"No one",
+        f"Create symbolic links": f"Administrators",
+        f"Debug programs": f"Administrators",
+        f"Deny access to this computer from the network": f"Guest, Local account",
+        f"Deny log on as a batch job": f"Guest",
+        f"Deny log on as a service": f"Guest",
+        f"Deny log on locally": f"Guest",
+        f"Deny log on through Remote Desktop Services": f"Guest, Local account",
+        f"Enable computer and user accounts to be trusted for delegation": f"No one",
+        f"Force shutdown from a remote system": f"Administrators",
+        f"Generate security audits": f"LOCAL SERVICE, NETWORK SERVICE",
+        f"Impersonate a client after authentication": f"Administrators, LOCAL SERVICE, NETWORK SERVICE, SERVICE",
+        f"Increase scheduling priority": f"Administrators",
+        f"Load and unload device drivers": f"Administrators",
+        f"Lock pages in memory": f"No one",
+        f"Log on as a batch job": f"Administrators",
+        f"Log on as a service": f"No one",
+        f"Manage auditing and security log": f"Administrators",
+        f"Modify an object label": f"No one",
+        f"Modify firmware environment values": f"Administrators",
+        f"Perform volume maintenance tasks": f"Administrators",
+        f"Profile single process": f"Administrators",
+        f"Profile system performance": f"Administrators, NT SERVICE\\WdiServiceHost",
+        f"Replace a process level token": f"LOCAL SERVICE, NETWORK SERVICE",
+        f"Restore files and directories": f"Administrators",
+        f"Shutdown the system": f"Administrators, Users",
+        f"Take ownership of file or other objects": f"Administrators"
     }
     for name, users in user_rights.items():
         ps_script = f"""
@@ -107,5 +109,30 @@ def func2_user_rights_assignments():
             print("An error occured: "  + e)
         print("Setting user right for: " + name + " -> " + users)
     print("All user rights assignemnts have been successfully configured")
+
+def func3_start_event_log():
+    try:
+        # Check if Event Log Service is running
+        print("Checking Event Log service status...")
+        service_status = subprocess.run(
+            ["powershell", "-Command", "Get-Service -Name EventLog | Select-Object -ExpandProperty Status"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Start service if Event Log Service is not running
+        if service_status != "Running":
+            print("Event Log service is not running. Starting the service...")
+            subprocess.run(["powershell", "-Command", "Start-Service -Name EventLog"], check=True)
+            print("Event Log service started.")
+
+        # Set Event Log Service to automatically start
+        print("Setting Event Log service to start automatically...")
+        subprocess.run(["powershell", "-Command", "Set-Service -Name EventLog -StartupType Automatic"], check=True)
+        print("Event Log service is now set to start automatically.")
+
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 main()
