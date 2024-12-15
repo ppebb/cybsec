@@ -2,7 +2,7 @@
 
 ## Required pip packages
 **Remember to remove all packages after completion!**
-- pywin32
+<!-- - pywin32 -->
 - subprocesses
 
 ## Script Points

@@ -1,5 +1,3 @@
-import pywin32_system32
-import winreg as reg
 import subprocess
 
 
@@ -37,8 +35,8 @@ def main():
 
 def menu():
     print("""
-        1) Enable auto updates                 2) Configure user rights assignments
-        3) Configure Event Log Service
+        1) Enable auto updates                  2) Configure user rights assignments
+        3) Configure Event Log Service          4) Enable Windows Firewall
         q) exit
         """)
     try:
@@ -134,5 +132,14 @@ def func3_start_event_log():
         print(f"An error occurred: {e}")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
+
+def func4_enable_firewall():
+    try:
+        print("Enabling Windows Firewall for all profiles...")
+        # Enable Windows Firewall for Domain, Private, and Public profiles
+        subprocess.run(["powershell", "-Command", "Set-NetFilrewallProfile -Profile Domain,Public,Private -Enabled True"], check=True)
+        print("Windows Firewall enabled for all profiles.")
+    except subprocess.SubprocessError as e:
+        print("Error occured: " + e)
 
 main()
