@@ -793,27 +793,6 @@ function check_crontabs() {
     set -e
 }
 
-function rkhunter() {
-    if ! prompt_install "rkhunter"; then
-        return
-    fi
-
-    rkhunter --update
-    rkhunter -c --sk
-}
-
-function clamav() {
-    if ! prompt_install "clamav clamtk"; then
-        return
-    fi
-
-    if prompt_y_n "Enable freshlclam service [y/N] "; then
-        systemctl enable --now clamav-freshclam
-    fi
-
-    clamscan / --log --recursive -- verbose
-}
-
 # Not sure if these parameters will work
 lightdm_conf="/etc/lightdm/lightdm.conf"
 lightdm_params=(
@@ -839,16 +818,6 @@ function display_manager() {
         echo "Fixing $gdm3_conf settings"
         apply_params_list "=" "^::param::\s*=\s*(true|false)" "$gdm3_conf" "${gdm3_params[@]}"
     fi
-}
-
-function auditd() {
-    if ! prompt_install "auditd"; then
-        return
-    fi
-
-    auditctl -e 1
-
-    echo "Enabled auditd"
 }
 
 function lynis() {
