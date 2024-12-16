@@ -219,9 +219,6 @@ login_params=(
     "PASS_MIN_DAYS 7"
     "PASS_WARN_AGE 7"
 
-    # Needs to match pam configuration
-    "ENCRYPT-METHOD SHA512"
-
     # Overridden by pam. Set just in case!
     "LOGIN_RETRIES 5"
     "LOGIN_TIMEOUT 60"
