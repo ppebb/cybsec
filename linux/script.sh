@@ -384,9 +384,11 @@ kparams=(
     "net.ipv4.conf.default.accept_redirects=0"
     "net.ipv6.conf.default.accept_redirects=0"
     "net.ipv4.conf.all.secure_redirects=0"
-    "net.ipv6.conf.all.secure_redirects=0"
+    # Broken!!!
+    # "net.ipv6.conf.all.secure_redirects=0"
     "net.ipv4.conf.default.secure_redirects=0"
-    "net.ipv6.conf.default.secure_redirects=0"
+    # Broken!!!
+    # "net.ipv6.conf.default.secure_redirects=0"
 
     # Ignore Directed pings
     "net.ipv4.icmp_echo_ignore_all=1"
@@ -408,7 +410,8 @@ kparams=(
     "kernel.yama.ptrace_scope=1"
     "net.core.bpf_jit_harden=2"
     "net.ipv4.conf.all.bootp_relay=0"
-    "net.ipv4.conf.all.mc_forwarding=0"
+    # Broken!!!
+    # "net.ipv4.conf.all.mc_forwarding=0"
     "net.ipv4.conf.all.proxy_arp=0"
     "net.ipv4.tcp_timestamps=0"
 
@@ -420,10 +423,11 @@ kparams=(
     "net.core.wmem_max=8388608"
     "net.ipv4.conf.all.rp_filter=1"
     "net.ipv4.conf.default.rp_filter=1"
-    "net.ipv4.ip_local_port_range=200065000"
-    "net.ipv4.tcp_rmem=102408738012582912"
+    # Broken!!!
+    # "net.ipv4.ip_local_port_range=200065000"
+    # "net.ipv4.tcp_rmem=102408738012582912"
     "net.ipv4.tcp_window_scaling=1"
-    "net.ipv4.tcp_wmem=102408738012582912"
+    # "net.ipv4.tcp_wmem=102408738012582912"
 
     # NOTE: Disabling ipv6 might be helpful
     # "net.ipv6.conf.all.disable_ipv6=1"
