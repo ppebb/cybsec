@@ -512,11 +512,18 @@ bad_software_list=(
     "tightvncserver"
     "x11vnc"
     "4g8"
+    "transmission-gtk"
+    "transmission-common"
 )
 
 function bad_software() {
-    apt purge "${bad_software_list[@]}"
+    set +e
 
+    for package in "${bad_software_list[@]}"; do
+        apt purge "$package"
+    done
+
+    set -e
     echo "Removed disallowed software"
 }
 
