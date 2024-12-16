@@ -766,6 +766,9 @@ cronfiles=(
 shopt -u nullglob
 
 function check_crontabs() {
+    # prevent exiting on error, because y_n_quit gets freaky and breaks fsr...
+    set +e
+
     view_all_files "${cronfiles[@]}"
 
     users=$(get_users)
@@ -779,6 +782,8 @@ function check_crontabs() {
             break
         fi
     done
+
+    set -e
 }
 
 function rkhunter() {
