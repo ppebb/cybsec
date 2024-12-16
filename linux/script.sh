@@ -5,7 +5,7 @@ set -e
 
 source ./utils.sh
 
-sec_pass="rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md"
+sec_pass="rnXvDH2iAhiALoNbfdFDiLkfYpt8G3md%&"
 
 perms_search_root="/home/"
 high_perm_min="700"
