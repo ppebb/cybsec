@@ -32,15 +32,19 @@ function update() {
     # distro (debian, ubuntu, mint), but I'll check one is installed using a
     # matching package just to make sure the system is one in which I should
     # actually be installing a linux-image-x.x.x-generic package
-    if apt list --installed | grep -qw "$linux_image_pattern"; then
-        local kernel_pkg
-        kernel_pkg=$(apt search linux-image | grep "$linux_image_pattern" | awk '{ print $2 }' | tail -n1)
+    if is_mint; then
+        if apt list --installed | grep -qw "$linux_image_pattern"; then
+            local kernel_pkg
+            kernel_pkg=$(apt search linux-image | grep "$linux_image_pattern" | awk '{ print $2 }' | tail -n1)
 
-        if prompt_y_n "Attempting to install kernel package $kernel_pkg, continue? [y/N] "; then
-            apt install "$kernel_pkg"
+            if prompt_y_n "Attempting to install kernel package $kernel_pkg, continue? [y/N] "; then
+                apt install "$kernel_pkg"
+            fi
+        else
+            echo "No package found matching '$linux_image_pattern', perhaps the kernel needs to be updated in a different way?"
         fi
     else
-        echo "No package found matching '$linux_image_pattern', perhaps the kernel needs to be updated in a different way?"
+        echo "Upgrading kernels automatically is only supported on mint, good luck!"
     fi
 
     echo "Done updating"
