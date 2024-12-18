@@ -53,15 +53,22 @@ function update() {
 # APT settings
 apt_periodic_conf="/etc/apt/apt.conf.d/10periodic"
 apt_autoupgrade_conf="/etc/apt/apt.conf.d/20auto-upgrades"
-apt_settings=(
-    "APT::Periodic::Update-Package-Lists \"1\";"
-    "APT::Periodic::Download-Upgradeable-Packages \"1\";"
-    "APT::Periodic::AutocleanInterval \"7\";"
-    "APT::Periodic::Unattended-Upgrade \"1\";"
-)
+# apt_settings=(
+#     "APT::Periodic::Update-Package-Lists \"1\";"
+#     "APT::Periodic::Download-Upgradeable-Packages \"1\";"
+#     "APT::Periodic::AutocleanInterval \"7\";"
+#     "APT::Periodic::Unattended-Upgrade \"1\";"
+# )
+
+apt_settings="APT::Periodic::Update-Package-Lists \"1\";
+APT::Periodic::Download-Upgradeable-Packages \"1\";
+APT::Periodic::AutocleanInterval \"7\";
+APT::Periodic::Unattended-Upgrade \"1\";"
 
 function auto_update() {
-    apply_params_list " " "^::param::\s*\"[0-9]" "$apt_periodic_conf" "${apt_settings[@]}"
+    # apply_params_list " " "^::param::\s*\"[0-9]" "$apt_periodic_conf" "${apt_settings[@]}"
+    # Just echo the settings. I don't care what's already there surely...
+    echo "$apt_settings" >"$apt_periodic_conf"
 
     cp -f "$apt_periodic_conf" "$apt_autoupgrade_conf"
 
